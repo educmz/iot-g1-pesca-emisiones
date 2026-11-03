@@ -11,18 +11,22 @@ Decisión con 2 sensores + promedio móvil + viento; enviar comandos firmados, a
 ## Ataque y defensa
 Integrar eventos de los cuatro ataques y presentar registro de ciberseguridad.
 
-## Lo que debes subir aquí
-- `sketch.ino` — firmware completo para ESP32.
+## Archivos del prototipo
+- `sketch.ino` — firmware fase 2 (Wi-Fi + MQTT sin validación HMAC).
 - `diagram.json` — circuito exportado de Wokwi.
-- `libraries.txt` — librerías usadas (si corresponde).
-- Capturas o logs reales que demuestren detección, actuación y rechazo del ataque.
-- Código de tu panel/botón de ataque integrado en la carpeta que acuerdes con Eduardo.
+- `libraries.txt` — librerías utilizadas.
+- `wokwi-project.txt` — enlace original.
 
 ## Registro de entrega
 - **Enlace Wokwi:** https://wokwi.com/projects/479700208383720449
 - **Enlace Cirkit (sección de nodo):** PENDIENTE
-- **Publicación MQTT:** PENDIENTE
-- **Pruebas locales de interfaz:** TFT muestra información, RTC detectado, NeoPixel cambia con N/A/C, pulsador reconoce alerta (confirmado mediante capturas y consola de Wokwi compartidas por el responsable). **Integración MQTT y actuación Fog: PENDIENTE.**
-- **Ataque rechazado y registrado:** PENDIENTE
+- **Pruebas locales:** TFT muestra información, RTC detectado, NeoPixel cambia con N/A/C, pulsador reconoce alerta (evidenciado por capturas y consola).
+- **Prueba MQTT:** Wi-Fi y MQTT conectados; heartbeat publicado y lecturas/estados de otros nodos recibidos en el monitor serial (captura compartida).
+- **Validación HMAC y anti-replay:** PENDIENTE
+- **Lógica Fog y orden firmada al lavador:** PENDIENTE
+- **Ataques rechazados/registrados:** PENDIENTE
+- **ThingSpeak:** PENDIENTE
 
-No agregar firmware simulado o capturas ficticias para llenar estos campos.
+**Seguridad:** usa HiveMQ público por TCP 1883, sin TLS. Los mensajes entrantes se muestran como **NO VERIFICADOS** y no deben utilizarse todavía para actuar. Las firmas recibidas no se validan. No se incluyen credenciales reales.
+
+**Nota:** el MQ-2 simulado no mide H2S ni NH3 de manera específica o calibrada.
