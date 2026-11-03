@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "author": "G1 Pesca - Eduardo",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "wokwi-esp32-devkit-v1", "id": "esp", "top": 4.7, "left": -379.4, "attrs": {} },
+    { "type": "wokwi-ili9341", "id": "tft", "top": -100, "left": -40, "attrs": {} },
+    {
+      "type": "wokwi-ds1307",
+      "id": "rtc1",
+      "top": -140,
+      "left": 270,
+      "attrs": { "initTime": "now" }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn",
+      "top": 330,
+      "left": -160,
+      "attrs": { "color": "blue", "label": "Reconocer alerta" }
+    },
+    { "type": "wokwi-neopixel", "id": "pixel", "top": 240, "left": 260, "attrs": {} }
+  ],
+  "connections": [
+    [ "esp:TX0", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX0", "$serialMonitor:TX", "", [] ],
+    [ "tft:VCC", "esp:VIN", "red", [] ],
+    [ "tft:GND", "esp:GND.1", "black", [] ],
+    [ "tft:CS", "esp:D5", "orange", [] ],
+    [ "tft:D/C", "esp:D27", "purple", [] ],
+    [ "tft:RST", "esp:D26", "green", [] ],
+    [ "tft:MOSI", "esp:D23", "green", [] ],
+    [ "tft:SCK", "esp:D18", "blue", [] ],
+    [ "tft:MISO", "esp:D19", "yellow", [] ],
+    [ "tft:LED", "esp:VIN", "red", [] ],
+    [ "rtc1:5V", "esp:VIN", "red", [] ],
+    [ "rtc1:GND", "esp:GND.1", "black", [] ],
+    [ "rtc1:SDA", "esp:D21", "green", [] ],
+    [ "rtc1:SCL", "esp:D22", "blue", [] ],
+    [ "btn:1.l", "esp:D25", "green", [] ],
+    [ "btn:2.l", "esp:GND.2", "black", [] ],
+    [ "pixel:VDD", "esp:VIN", "red", [] ],
+    [ "pixel:VSS", "esp:GND.2", "black", [] ],
+    [ "pixel:DIN", "esp:D32", "green", [] ]
+  ],
+  "serialMonitor": { "display": "auto", "newline": "lf" },
+  "dependencies": {}
+}
