@@ -1,7 +1,6 @@
-# Proyectos Wokwi
-
-Un proyecto ESP32 por nodo. Las carpetas `nodo1-pozas`, `nodo2-secadores`, `nodo3-perimetro`, `nodo4-lavador` y `nodo5-gateway` incluyen la lista de entregables de cada integrante.
-
-**Ningún nodo está implementado solo por existir su carpeta.** Los cinco enlaces públicos/compartidos deben agregarse cuando las simulaciones estén listas.
-
-Primero acordar [contrato MQTT](../docs/contrato-mqtt/README.md); después subir código, diagramas y pruebas.
+## Registro de entrega
+- **Enlace Wokwi:** https://wokwi.com/projects/479699850241480705
+- **Enlace Cirkit (sección de nodo):** https://app.cirkitdesigner.com/project/37ff5f4e-1d1d-4788-b2f4-8eea0eca768c
+- **Publicación MQTT:** upc/g1/nodo3/datos (gas, viento, riesgo), alerta, estado; eventos en upc/g1/seguridad/eventos
+- **Actuación comprobada:** LED fijo con gas ≥ 5000 ppm simulados y viento 45–135° (ver evidencias/02-riesgo-alto.png)
+- **Ataque rechazado y registrado:** aire limpio falso rechazado por firma HMAC y coherencia (ver evidencias/03-ataque-rechazado.png)
