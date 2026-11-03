@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nodo 3 Perímetro</title>
+<script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"></script>
+<script>if (!window.mqtt) document.write('<script src="https://cdn.jsdelivr.net/npm/mqtt@4.3.7/dist/mqtt.min.js"><\/script>');</script>
+<style>
+  :root{--bg:#f4f6f8;--card:#fff;--ink:#1d2733;--mute:#5d6b7a;--line:#d9e0e7;
+        --ok:#2e8b57;--warn:#d98e04;--bad:#c0392b;--accent:#1f6feb;--sector:rgba(192,57,43,.15)}
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#11161c;--card:#1a222b;--ink:#e6edf3;--mute:#9aa7b4;--line:#2b3641;--sector:rgba(231,76,60,.22)}}
+  :root[data-theme="dark"]{--bg:#11161c;--card:#1a222b;--ink:#e6edf3;--mute:#9aa7b4;--line:#2b3641;--sector:rgba(231,76,60,.22)}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:16px}
+  h1{font-size:20px;margin:0 0 4px} .sub{color:var(--mute);margin:0 0 16px}
+  .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .lbl{color:var(--mute);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+  .big{font-size:40px;font-weight:700;font-variant-numeric:tabular-nums}
+  .pill{display:inline-block;padding:3px 10px;border-radius:99px;font-weight:600;font-size:13px;color:#fff}
+  .BAJO{background:var(--ok)} .MEDIO{background:var(--warn)} .ALTO{background:var(--bad)}
+  .on{color:var(--ok)} .off{color:var(--bad)}
+  .led{width:22px;height:22px;border-radius:50%;background:#555;display:inline-block;vertical-align:middle;margin-right:8px}
+  .led.lit{background:#ff3b30;box-shadow:0 0 14px #ff3b30}
+  .led.blink{animation:b .5s steps(1) infinite} @keyframes b{50%{background:#555;box-shadow:none}}
+  button{font:inherit;border:0;border-radius:8px;padding:10px 12px;background:var(--bad);color:#fff;cursor:pointer;width:100%;margin-top:8px}
+  button.sec{background:#6c3fb5}
+  table{width:100%;border-collapse:collapse;font-size:13px} td,th{text-align:left;padding:6px;border-bottom:1px solid var(--line);vertical-align:top}
+  .rej{color:var(--bad);font-weight:600}
+  .wrap{overflow-x:auto}
+</style>
+</head>
+<body>
+<h1>Nodo 3 · Perímetro</h1>
+<p class="sub">Verifica si la emisión llega a la comunidad según el viento. <span id="conn">Conectando…</span></p>
+
+<div class="grid">
+  <div class="card">
+    <div class="lbl">Gas en el borde (MQ-2)</div>
+    <div class="big"><span id="gas">–</span> <small style="font-size:16px">ppm</small></div>
+    <div>Calidad: <b id="cal">–</b> · Nodo: <b id="estado">–</b></div>
+    <div id="verif" style="color:var(--mute);font-size:13px">–</div>
+  </div>
+  <div class="card">
+    <div class="lbl">Riesgo hacia la comunidad</div>
+    <p style="margin:8px 0"><span id="led" class="led"></span><span id="riesgo" class="pill BAJO">–</span></p>
+    <div id="modo" style="font-size:13px;color:var(--mute)">–</div>
+  </div>
+  <div class="card">
+    <div class="lbl">Viento (potenciómetro)</div>
+    <svg viewBox="-60 -60 120 120" width="130" height="130" aria-label="Brújula del viento">
+      <!-- sector de la comunidad: 90° ± 45° -->
+      <path d="M0 0 L42.4 -42.4 A60 60 0 0 1 42.4 42.4 Z" transform="scale(.9)" fill="var(--sector)"/>
+      <circle r="50" fill="none" stroke="var(--line)" stroke-width="2"/>
+      <text y="-38" text-anchor="middle" font-size="10" fill="var(--mute)">N</text>
+      <text x="40" y="4" text-anchor="middle" font-size="9" fill="var(--bad)">Comun.</text>
+      <text y="45" text-anchor="middle" font-size="10" fill="var(--mute)">S</text>
+      <text x="-40" y="4" text-anchor="middle" font-size="10" fill="var(--mute)">O</text>
+      <g id="flecha"><line y1="20" y2="-40" stroke="var(--accent)" stroke-width="4" stroke-linecap="round"/>
+        <path d="M0 -46 L-7 -32 L7 -32 Z" fill="var(--accent)"/></g>
+    </svg>
+    <div><b id="viento">–</b>° · <span id="hacia">–</span></div>
+  </div>
+  <div class="card">
+    <div class="lbl">Panel de ataques (nodo 3)</div>
+    <button id="atk1">Ataque: falso "aire limpio"</button>
+    <button id="atk3">Ataque externo: publicar "aire limpio" desde el navegador</button>
+    <button id="atk2" class="sec">Ataque: repetir un mensaje viejo</button>
+    <div style="font-size:12px;color:var(--mute);margin-top:6px">El panel no conoce la clave HMAC. El rechazo solo se da por hecho cuando el nodo publica su evento.</div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:12px">
+  <div class="lbl">Registro de eventos de seguridad y alertas</div>
+  <div class="wrap"><table>
+    <thead><tr><th>Hora</th><th>Nodo</th><th>Tipo</th><th>Acción tomada</th><th>Motivo</th></tr></thead>
+    <tbody id="log"></tbody>
+  </table></div>
+</div>
+
+<script>
+const BROKER = 'wss://broker.hivemq.com:8884/mqtt';
+const T = 'upc/g1/nodo3/';
+const T_SEG = 'upc/g1/seguridad/eventos', T_SIM = 'upc/g1/sim/ataque';
+const RIESGO = ['BAJO', 'MEDIO', 'ALTO'];
+const $ = id => document.getElementById(id);
+let ultimoSeq = 0, pendientes = [];
+
+if (!window.mqtt) { document.getElementById('conn').textContent = 'No se pudo cargar la librería MQTT: abre este archivo con Chrome o Edge, con internet.'; throw new Error('sin mqtt'); }
+const c = mqtt.connect(BROKER, { clientId: 'g1-panel-n3-' + Math.random().toString(16).slice(2, 8) });
+c.on('connect', () => { $('conn').textContent = 'Conectado al broker.'; c.subscribe([T + '#', T_SEG]); });
+c.on('close', () => $('conn').textContent = 'Sin conexión al broker.');
+
+c.on('message', (topic, buf) => {
+  const txt = buf.toString(); let m; try { m = JSON.parse(txt); } catch { m = null; }
+  if (!m) return;
+  if (topic === T + 'estado') {
+    const on = m.estado !== 'offline';
+    $('estado').textContent = on ? 'online' : 'offline'; $('estado').className = on ? 'on' : 'off';
+    if (on) $('modo').textContent = m.modo_seguro ? 'Modo seguro: sin gateway, umbral local más estricto' : 'Coordinado con el gateway';
+  } else if (topic === T + 'datos' && m.id === 'nodo3') {
+    // Se espera 800 ms: si el nodo 3 lo rechaza en ese tiempo, nunca se muestra.
+    const p = { m, t: setTimeout(() => aplicar(m), 800) }; pendientes.push(p);
+  } else if (topic === T_SEG && m.nodo === 'nodo3') {
+    pendientes = pendientes.filter(p => {
+      const f = (p.m.firma || '(sin firma)').slice(0, 16);
+      const coincide = p.m.seq === m.seq_rechazado && f === m.firma_rechazada;
+      if (coincide) clearTimeout(p.t);
+      return !coincide;
+    });
+    registrar(m.hora, m.nodo, m.ataque, m.accion, m.motivo, true);
+  } else if (topic === T + 'alerta' && m.tipo) {
+    registrar(null, 'nodo3', m.tipo, 'Alerta', m.motivo, false);
+  }
+});
+
+function aplicar(m) {
+  pendientes = pendientes.filter(p => p.m !== m);
+  ultimoSeq = Math.max(ultimoSeq, m.seq || 0);
+  if (m.sensor === 'gas') {
+    $('gas').textContent = Math.round(m.valor);
+    $('cal').textContent = m.calidad;
+    $('verif').textContent = 'seq ' + m.seq + ' · firmado por el nodo';
+  } else if (m.sensor === 'viento') {
+    const g = Math.round(m.valor), d = Math.abs(g - 90) % 360, dif = d > 180 ? 360 - d : d;
+    $('viento').textContent = g;
+    $('hacia').textContent = dif <= 45 ? 'hacia la comunidad' : 'hacia otro lado';
+    $('flecha').setAttribute('transform', 'rotate(' + g + ')');
+  } else if (m.sensor === 'riesgo') {
+    const r = RIESGO[Math.round(m.valor)] || '–';
+    $('riesgo').textContent = r; $('riesgo').className = 'pill ' + r;
+    $('led').className = 'led' + (r === 'ALTO' ? ' lit' : r === 'MEDIO' ? ' lit blink' : '');
+  }
+}
+
+function registrar(hora, nodo, tipo, accion, motivo, rechazo) {
+  const tr = document.createElement('tr');
+  [hora || new Date().toLocaleTimeString('es-PE'), nodo, tipo, accion, motivo].forEach((v, i) => {
+    const td = document.createElement('td'); td.textContent = v ?? '';
+    if (rechazo && (i === 2 || i === 3)) td.className = 'rej'; tr.appendChild(td);
+  });
+  $('log').prepend(tr);
+}
+
+// Solicitud con el mismo formato que el dashboard del grupo (upc/g1/sim/ataque)
+function pedir(ataque) {
+  c.publish(T_SIM, JSON.stringify({ id: 'nodo3', ataque, ts: Date.now(), origen: 'dashboard_simulacion' }));
+  registrar(null, 'panel', 'solicitud enviada', ataque, 'Esperando el evento real del firmware', false);
+}
+$('atk1').onclick = () => pedir('aire_limpio_falso');
+$('atk2').onclick = () => pedir('repeticion');
+// Ataque externo real: el navegador publica directo en el tópico del nodo, sin la clave
+$('atk3').onclick = () => {
+  const falso = { id: 'nodo3', ts: Date.now(), seq: ultimoSeq + 1, sensor: 'gas', valor: 0, unidad: 'ppm',
+                  calidad: 'ok', firma: 'f'.repeat(64) };
+  c.publish(T + 'datos', JSON.stringify(falso));
+  registrar(null, 'panel', 'ataque enviado', 'Publicado "aire limpio" sin firma válida', 'Esperando el evento real del firmware', false);
+};
+</script>
+</body>
+</html>
