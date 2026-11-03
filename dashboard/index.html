@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>G1 Pesca | Dashboard IoT</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <script defer src="https://unpkg.com/mqtt@5/dist/mqtt.min.js"></script>
+  <script defer src="js/config.js"></script>
+  <script defer src="js/app.js"></script>
+</head>
+<body>
+  <header class="header">
+    <div><div class="eyebrow">Laboratorio de Soluciones IoT · G1</div><h1>Monitoreo de emisiones · Planta pesquera</h1></div>
+    <div class="status" id="connectionStatus">MQTT: sin conexión</div>
+  </header>
+  <nav class="tabs" aria-label="Pestañas del proyecto">
+    <button type="button" class="tab active" data-tab="problema">1. Problema</button>
+    <button type="button" class="tab" data-tab="solucion">2. Solución</button>
+    <button type="button" class="tab" data-tab="operacion">3. Operación en vivo</button>
+    <button type="button" class="tab" data-tab="seguridad">4. Ciberseguridad</button>
+    <button type="button" class="tab" data-tab="resultados">5. Resultados</button>
+  </nav>
+  <main>
+    <section id="problema" class="panel active" aria-label="Problema">
+      <h2>Problema y pregunta de investigación</h2>
+      <p>Pesquera Costa Norte S.A.C. (ficticia), Chimbote: hasta 1 200 t/día, a 800 m de zona residencial. Emisiones de la descarga, pozas y secado; medición manual mensual, 14 quejas vecinales y 2 procesos de fiscalización en la última temporada.</p>
+      <p>Las causas incluyen espera prolongada de materia prima, lavadores manuales y ausencia de información del viento. Una paralización puede costar alrededor de USD 90 000/día, según el caso del laboratorio.</p>
+      <h3>Reto</h3>
+      <p>¿En qué capa (Edge o Fog) y con qué estrategia de detección conviene activar lavadores para responder rápido a picos sin falsas alarmas que interrumpan la operación?</p>
+    </section>
+    <section id="solucion" class="panel" hidden aria-label="Solución">
+      <h2>Arquitectura en cinco capas</h2>
+      <p><strong>Device</strong> sensores y actuadores → <strong>Embedded</strong> ESP32 → <strong>Edge</strong> seguridad local → <strong>Fog</strong> gateway → <strong>Cloud</strong> ThingSpeak.</p>
+      <div class="notice">Captura del diagrama general Cirkit: pendiente de adjuntar. Reemplazar este texto con la captura validada.</div>
+      <div class="grid" id="solutionNodes"></div>
+    </section>
+    <section id="operacion" class="panel" hidden aria-label="Operación en vivo">
+      <h2>Operación en vivo</h2>
+      <p class="muted">Lecturas procedentes de mensajes MQTT. «Sin datos» significa que todavía no se recibió telemetría.</p>
+      <div class="grid" id="liveNodes"></div>
+      <h3>Eventos de operación</h3>
+      <ol id="operationsLog" class="events"><li>Esperando mensajes MQTT de los nodos…</li></ol>
+    </section>
+    <section id="seguridad" class="panel" hidden aria-label="Ciberseguridad">
+      <h2>Panel de ataques simulados</h2>
+      <p class="muted">Pulsar un botón solicita una prueba. El rechazo debe ser reportado por el firmware y reflejado aquí; el navegador no lo inventa.</p>
+      <div class="grid attacks">
+        <button type="button" data-attack="lectura_imposible" data-target="nodo1">Nodo 1 · Lectura imposible</button>
+        <button type="button" data-attack="suplantacion" data-target="nodo2">Nodo 2 · Suplantación</button>
+        <button type="button" data-attack="aire_limpio_falso" data-target="nodo3">Nodo 3 · Aire limpio falso</button>
+        <button type="button" data-attack="apagado_falso" data-target="nodo4">Nodo 4 · Orden falsa/replay</button>
+      </div>
+      <p id="attackFeedback" role="status" class="notice">No hay solicitudes de ataque enviadas en esta sesión.</p>
+      <h3>Registro de eventos de seguridad</h3>
+      <table><thead><tr><th>Hora</th><th>Nodo</th><th>Ataque</th><th>Acción</th><th>Motivo</th></tr></thead><tbody id="securityEvents"><tr><td colspan="5">Sin eventos de seguridad recibidos</td></tr></tbody></table>
+    </section>
+    <section id="resultados" class="panel" hidden aria-label="Resultados">
+      <h2>Comparación A vs. B (y C opcional)</h2>
+      <p>Comparar tiempo desde detección hasta actuación y falsas activaciones. Los datos experimentales se guardan en <code>pruebas/</code>.</p>
+      <div class="notice">Resultados de pruebas reales: pendientes de ejecución y análisis. No se muestran métricas ficticias.</div>
+      <div id="thingspeakContainer"></div>
+    </section>
+  </main>
+  <footer>G1 Pesca · Simulación académica, no monitoreo ambiental certificado · Estado de integración: en desarrollo</footer>
+</body>
+</html>
