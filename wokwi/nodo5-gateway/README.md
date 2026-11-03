@@ -19,10 +19,10 @@ Integrar eventos de los cuatro ataques y presentar registro de ciberseguridad.
 - Código de tu panel/botón de ataque integrado en la carpeta que acuerdes con Eduardo.
 
 ## Registro de entrega
-- **Enlace Wokwi:** PENDIENTE
+- **Enlace Wokwi:** https://wokwi.com/projects/479700208383720449
 - **Enlace Cirkit (sección de nodo):** PENDIENTE
 - **Publicación MQTT:** PENDIENTE
-- **Actuación comprobada:** PENDIENTE
+- **Pruebas locales de interfaz:** TFT muestra información, RTC detectado, NeoPixel cambia con N/A/C, pulsador reconoce alerta (confirmado mediante capturas y consola de Wokwi compartidas por el responsable). **Integración MQTT y actuación Fog: PENDIENTE.**
 - **Ataque rechazado y registrado:** PENDIENTE
 
 No agregar firmware simulado o capturas ficticias para llenar estos campos.
