@@ -1,0 +1,10 @@
+{
+  "host": "broker.hivemq.com",
+  "port": 8000,
+  "topic_cmd": "upc/g1/nodo4/cmd",
+  "topic_alerta": "upc/g1/nodo4/alerta",
+  "topic_datos": "upc/g1/nodo4/datos",
+  "topic_estado": "upc/g1/nodo4/estado",
+  "clave_gateway": "G1_Gateway_Lab_2026_P7mA92sZ4Cw",
+  "clave_nodo4": "G1_Nodo4_Lab_2026_R8kB63tX5Dy"
+}
