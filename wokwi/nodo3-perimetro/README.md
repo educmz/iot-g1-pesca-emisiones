@@ -1,6 +1,6 @@
 # Nodo 3 — Perímetro
 
-**Responsable:** Gonzalo
+**Responsable:** Wilder Gonzalo Aliaga Urbina
 
 ## Componentes
 MQ-2 (analógica), potenciómetro (viento simulado), LED indicador.
@@ -10,13 +10,6 @@ Convertir el potenciómetro a dirección de viento simulada y enviarla al gatewa
 
 ## Ataque y defensa
 Mensaje falso «aire limpio»; rechazar por firma y coherencia con pozas/secadores/viento.
-
-## Lo que debes subir aquí
-- `sketch.ino` — firmware completo para ESP32.
-- `diagram.json` — circuito exportado de Wokwi.
-- `libraries.txt` — librerías usadas (si corresponde).
-- Capturas o logs reales que demuestren detección, actuación y rechazo del ataque.
-- Código de tu panel/botón de ataque integrado en la carpeta que acuerdes con Eduardo.
 
 ## Registro de entrega
 - **Enlace Wokwi:** https://wokwi.com/projects/479699850241480705
