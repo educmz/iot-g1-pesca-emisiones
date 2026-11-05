@@ -4,9 +4,9 @@
 **Caso:** Pesquera Costa Norte S.A.C. (ficticia), Chimbote · **Equipo:** Fernando, Fabricio, Gonzalo, Pedro y Eduardo  
 **Tecnologías:** ESP32, Wokwi, Cirkit Designer, WiFi/MQTT, Edge/Fog, ThingSpeak y dashboard HTML.
 
-> **Estado de validación al 05/11/2026:** cinco firmwares y dashboard publicados, pruebas individuales de sensores/actuadores/seguridad, recepción HMAC de N1 por N5 y escrituras HTTPS confirmadas en ThingSpeak. **Todavía no está demostrado el funcionamiento simultáneo y estable de los cinco nodos**: el Gateway presentó desconexiones MQTT `state=-3`. La comparación A/B, el diagrama general Cirkit validado y las métricas físicas cuantitativas siguen pendientes. No se inventan resultados.
+> **Actualización del equipo (05/11/2026):** el grupo informa que los cinco nodos ya funcionan de manera integrada. El README todavía necesita **incorporar capturas y registros de esa prueba final** y reflejar las correcciones del fallo MQTT `state=-3`, que corresponde a las pruebas anteriores. Ya se registró el **enlace al Cirkit general**, pero faltan su captura exportada y validación eléctrica documentada. La comparación A/B y algunas métricas cuantitativas siguen pendientes en el repositorio. No se inventan resultados.
 
-**Enlaces rápidos:** [Dashboard](https://educmz.github.io/iot-g1-pesca-emisiones/) · [N1](https://wokwi.com/projects/479864540006804481) · [N2](https://wokwi.com/projects/479864093839705089) · [N3](https://wokwi.com/projects/479866498817689601) · [N4](https://wokwi.com/projects/479867720782481409) · [N5 Gateway](https://wokwi.com/projects/479700208383720449) · [ThingSpeak privado](https://thingspeak.com/channels/3567916)
+**Enlaces rápidos:** [Cirkit general](https://app.cirkitdesigner.com/project/373d1c97-d707-40e2-8416-f6e8a5aca5a3) · [Dashboard](https://educmz.github.io/iot-g1-pesca-emisiones/) · [N1](https://wokwi.com/projects/479864540006804481) · [N2](https://wokwi.com/projects/479864093839705089) · [N3](https://wokwi.com/projects/479866498817689601) · [N4](https://wokwi.com/projects/479867720782481409) · [N5 Gateway](https://wokwi.com/projects/479700208383720449) · [ThingSpeak privado](https://thingspeak.com/channels/3567916)
 
 ## Índice de entrega
 
@@ -165,6 +165,8 @@ Los perfiles siguientes se proponen a partir del caso; **no hay evidencia de ent
 
 ## Paso 8. Diagrama en Cirkit Designer
 
+**[Ver circuito integrado del equipo en Cirkit Designer](https://app.cirkitdesigner.com/project/373d1c97-d707-40e2-8416-f6e8a5aca5a3)**.
+
 Cada integrante aporta su diseño. **Se exige un diagrama general de los cinco nodos** con sensores/actuadores, GPIO, fuente y tipos de señal (ADC, GPIO, 1-Wire, I²C, SPI).
 
 | Nodo | Diagrama individual disponible |
@@ -175,7 +177,7 @@ Cada integrante aporta su diseño. **Se exige un diagrama general de los cinco n
 | N4 | [Cirkit Pedro](https://app.cirkitdesigner.com/project/4663bde6-8941-4af3-a259-1a44f4c8d95b) |
 | N5 | [Circuito documentado en Wokwi](wokwi/nodo5-gateway/diagram.json); ubicación Cirkit por confirmar. |
 
-**Diagrama general con cinco nodos, captura exportada y validación de señales: PENDIENTE.** No sustituirlo con un dibujo no verificado. [Carpeta general](cirkit/diagrama-general/README.md).
+**Diagrama general compartido por el equipo:** [Abrir diseño integrado en Cirkit Designer](https://app.cirkitdesigner.com/project/373d1c97-d707-40e2-8416-f6e8a5aca5a3). **Enlace registrado.** Aún falta añadir a GitHub una **captura exportada del diagrama** y documentar la **revisión de señales, GPIO, alimentación y concordancia con Wokwi**. No se ha podido inspeccionar gráficamente el contenido del proyecto desde este acceso. [Carpeta general](cirkit/diagrama-general/README.md).
 
 ## Paso 9. Proyectos Wokwi de los cinco ESP32
 
@@ -206,7 +208,7 @@ Cada integrante aporta su diseño. **Se exige un diagrama general de los cinco n
 | Fallo | Sin confirmación tras 10 s: alerta y `VENT_MAX` a N1. |
 | Sin Gateway | N4 activa protección cuando supera 60 s sin contacto válido. |
 
-**Secuencia que debe demostrarse:** pico en pozas + segunda fuente + viento a comunidad → D5 decide → orden firmada a D4 → relé/motor actúa → confirmación → visualización; negar confirmación → respaldo N1. Si faltan datos recientes, **no ordenar apagado inseguro**. La integración completa aún no está validada.
+**Secuencia que debe documentarse con evidencias:** pico en pozas + segunda fuente + viento a comunidad → D5 decide → orden firmada a D4 → relé/motor actúa → confirmación → visualización; negar confirmación → respaldo N1. Si faltan datos recientes, **no ordenar apagado inseguro**. El equipo informa que la integración ya funciona, pero aún se deben subir las evidencias de esa ejecución.
 
 [Reglas](docs/reglas/README.md) · [Lógica y pruebas Fog](wokwi/nodo5-gateway/).
 
@@ -275,10 +277,11 @@ Las capturas individuales están en las carpetas de cada nodo; **falta validar**
 | Firmwares ESP32 y pruebas individuales | **Disponibles** en carpetas N1–N5. |
 | Dashboard de 5 pestañas | **Publicado**; depende de MQTT activo para datos vivos. |
 | HTTP ThingSpeak desde Gateway | **Confirmado** con entrada positiva. |
-| Diagrama general Cirkit con los 5 nodos, señalado y verificado | **PENDIENTE**. |
+| Enlace del diagrama general Cirkit | **REGISTRADO**: [abrir diseño](https://app.cirkitdesigner.com/project/373d1c97-d707-40e2-8416-f6e8a5aca5a3). |
+| Captura exportada del Cirkit general y revisión de los 5 nodos, señales y GPIO | **PENDIENTE** de adjuntar/verificar. |
 | Cálculo energético/autonomía y incertidumbre/actuación numérica | **PENDIENTE**. |
 | Costo WAN mensual validado ≤S/150 | **PENDIENTE** de cotización. |
-| Cinco Wokwi estables, HMAC, lazo cerrado y fields 2–7 | **PENDIENTE**, cortes MQTT `state=-3`. |
+| Cinco Wokwi estables, HMAC, lazo cerrado y fields 2–7 | **FUNCIONAMIENTO REPORTADO POR EL EQUIPO; EVIDENCIA PENDIENTE**. Adjuntar registros/capturas actuales y describir resolución de los cortes históricos `state=-3`. |
 | Comparación A/B (latencia y falsas alarmas) | **PENDIENTE** de datos propios. |
 | Cuatro ataques completos desde la web | **PENDIENTE** de demostración integrada. |
 | Cambio de parámetro y planes de contingencia | **PENDIENTE**. |
