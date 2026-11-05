@@ -1,0 +1,54 @@
+name: Publicar dashboard G1 Pesca en GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "dashboard/**"
+      - ".github/workflows/dashboard-pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Publicar dashboard
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Verificar archivos del dashboard
+        shell: bash
+        run: |
+          test -s dashboard/index.html
+          test -s dashboard/css/style.css
+          test -s dashboard/js/app.js
+          test -s dashboard/js/config.public.js
+          grep -Fq 'src="js/config.public.js"' dashboard/index.html
+          if grep -Eq 'HMAC_KEY|THINGSPEAK_WRITE_API_KEY|CLAVE_GATEWAY|CLAVE_NODO4' dashboard/js/config.public.js; then
+            echo "La configuracion publica no debe contener referencias a claves privadas."
+            exit 1
+          fi
+
+      - name: Configurar GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Preparar el sitio estatico
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dashboard
+
+      - name: Desplegar a GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
