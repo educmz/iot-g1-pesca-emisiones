@@ -1,0 +1,37 @@
+name: Verificar Nodo 4 ESP32 y HMAC
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [nodo4-pedro]
+jobs:
+  nodo4:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validar JSON del circuito
+        run: python -m json.tool wokwi/nodo4-lavador/diagram.json > /dev/null
+      - name: Pruebas offline del puente y HMAC
+        run: |
+          python -m pip install -r wokwi/nodo4-lavador/dashboard/requirements.txt
+          python -m unittest discover -v -s wokwi/nodo4-lavador/dashboard/tests -p 'test_*.py'
+      - name: Instalar soporte ESP32
+        run: |
+          arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core install esp32:esp32 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+      - name: Instalar librerias
+        run: |
+          arduino-cli lib install "PubSubClient"
+          arduino-cli lib install "ArduinoJson@6.21.5"
+      - name: Preparar sketch de Wokwi
+        run: |
+          mkdir -p "$RUNNER_TEMP/nodo4"
+          cp wokwi/nodo4-lavador/sketch.ino "$RUNNER_TEMP/nodo4/nodo4.ino"
+          cp wokwi/nodo4-lavador/secrets.example.h "$RUNNER_TEMP/nodo4/secrets.h"
+      - name: Compilar ESP32
+        run: arduino-cli compile --fqbn esp32:esp32:esp32 "$RUNNER_TEMP/nodo4" --warnings all
