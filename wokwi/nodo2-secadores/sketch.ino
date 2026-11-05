@@ -9,6 +9,7 @@
 #include <DHTesp.h>
 #include <mbedtls/md.h>
 #include <time.h>
+#include <ArduinoJson.h>
 #include "config.h"
 
 constexpr int PIN_DHT = 15, PIN_GAS = 34;
@@ -60,7 +61,7 @@ String hmacSha256(const String& message) {
   return toHex(output, sizeof(output));
 }
 
-// Debe coincidir byte a byte con backend/lib/protocol.js
+// Paquete individual /paquete: debe coincidir con backend/lib/protocol.js
 String canonical(const String& boot, long ts, uint32_t seq, float t, float h,
                  int raw, float gas, const String& quality, const String& status) {
   return "v1|nodo2|" + boot + "|" + String(ts) + "|" + String(seq) + "|" +
@@ -87,6 +88,14 @@ void applyEdge(const String& status) {
   else setRGB(true, false, false); // alerta o error de sensor: señal roja
 }
 
+void publicarEstado() {
+  if (!mqtt.connected()) return;
+  StaticJsonDocument<160> j;
+  j["id"]="nodo2";j["estado"]="online";j["ts"]=millis();
+  char out[160];serializeJson(j,out,sizeof(out));
+  mqtt.publish(MQTT_ROOT "/estado",out,true);
+}
+
 void ensureNetwork() {
   unsigned long now = millis();
   if (WiFi.status() != WL_CONNECTED) {
@@ -102,9 +111,9 @@ void ensureNetwork() {
   lastMqttTry = now;
   String clientId = "g1-secadores-" + bootId;
   bool ok = mqtt.connect(clientId.c_str(), nullptr, nullptr,
-                         MQTT_ROOT "/estado", 1, true, "offline");
+                         MQTT_ROOT "/estado", 1, true, "{\"id\":\"nodo2\",\"estado\":\"offline\"}");
   if (ok) {
-    mqtt.publish(MQTT_ROOT "/estado", "online", true);
+    publicarEstado();
     lastHeartbeat = now;
     Serial.println("[MQTT] Conectado. LWT=offline, estado=online");
   } else {
@@ -112,7 +121,7 @@ void ensureNetwork() {
   }
 }
 
-void publishMeasurement(const String& topic, float t, float h, int raw,
+void publishPackage(const String& topic, float t, float h, int raw,
                         float gas, const String& quality, const String& status) {
   if (!mqtt.connected()) return;
   time_t current = time(nullptr);
@@ -135,6 +144,39 @@ void publishMeasurement(const String& topic, float t, float h, int raw,
   Serial.printf("[MQTT] %s seq=%lu %s\n", topic.c_str(), (unsigned long)seq, sent ? "OK":"ERROR");
 }
 
+// Telemetria del grupo. HMAC canonico igual que Nodo 3:
+// id|ts_millis|seq|sensor|valor(2)|unidad|calidad
+void publicarSensor(const char* topic,const char* sensor,float valor,
+                    const char* unidad,const String& calidad) {
+  if(!mqtt.connected())return;
+  uint32_t ts=millis(),seq=++seqNumber;
+  String canon=String("nodo2|")+ts+"|"+seq+"|"+sensor+"|"+
+               String(valor,2)+"|"+unidad+"|"+calidad;
+  String firma=hmacSha256(canon);
+  if(firma.length()!=64)return;
+  StaticJsonDocument<400> doc;
+  doc["id"]="nodo2";doc["ts"]=ts;doc["seq"]=seq;doc["sensor"]=sensor;
+  doc["valor"]=serialized(String(valor,2));
+  doc["unidad"]=unidad;doc["calidad"]=calidad;doc["firma"]=firma;
+  if(strcmp(topic,MQTT_ROOT "/alerta")==0)doc["tipo"]="riesgo_secadores";
+  char out[400];serializeJson(doc,out,sizeof(out));
+  mqtt.publish(topic,out);
+}
+float nivel(const String& estado) {
+  if(estado=="NORMAL")return 0.0f;
+  if(estado=="ADVERTENCIA")return 1.0f;
+  if(estado=="ALERTA")return 2.0f;
+  return 3.0f;
+}
+void publicarDatosGrupo(float t,float h,int raw,float gas,
+                        const String& calidad,const String& estado) {
+  publicarSensor(MQTT_ROOT "/datos","gas_relativo",gas,"%",calidad);
+  publicarSensor(MQTT_ROOT "/datos","gas_raw",float(raw),"adc",calidad);
+  publicarSensor(MQTT_ROOT "/datos","temperatura",t,"C",calidad);
+  publicarSensor(MQTT_ROOT "/datos","humedad",h,"%",calidad);
+  publicarSensor(MQTT_ROOT "/datos","estado_secadores",nivel(estado),"nivel",calidad);
+}
+
 void setup() {
   Serial.begin(115200);
   pinMode(PIN_R, OUTPUT); pinMode(PIN_G, OUTPUT); pinMode(PIN_B, OUTPUT);
@@ -144,9 +186,12 @@ void setup() {
   analogReadResolution(12);
   analogSetPinAttenuation(PIN_GAS, ADC_11db);
   bootId = String(esp_random(), HEX) + String(esp_random(), HEX);
+  if(strlen(HMAC_KEY)<24 || strncmp(HMAC_KEY,"CAMBIAR_POR_",11)==0) {
+    Serial.println("[SEGURIDAD] Configura HMAC_KEY privada en config.h");
+  }
   WiFi.mode(WIFI_STA);
   mqtt.setServer(MQTT_BROKER, MQTT_PORT);
-  mqtt.setBufferSize(768);
+  mqtt.setBufferSize(1024);
   mqtt.setKeepAlive(30);
   configTime(0, 0, "pool.ntp.org", "time.google.com");
   Serial.println("Nodo 2 Secadores - accion EDGE y MQTT HMAC");
@@ -171,9 +216,10 @@ void loop() {
     applyEdge(status);
     Serial.printf("[EDGE] Temp=%.2f C | Hum=%.2f %% | Gas ADC usado=%d (%.2f %%) | %s | calidad=%s | ADC MQ2 simulado=%d\n",
                   t,h,raw,gas,status.c_str(),quality.c_str(),rawMQ2);
-    publishMeasurement(MQTT_ROOT "/datos", t,h,raw,gas,quality,status);
+    publishPackage(MQTT_ROOT "/paquete", t,h,raw,gas,quality,status);
+    publicarDatosGrupo(t,h,raw,gas,quality,status);
     if (status != previousStatus && status != "NORMAL") {
-      publishMeasurement(MQTT_ROOT "/alerta", t,h,raw,gas,quality,status);
+      publicarSensor(MQTT_ROOT "/alerta","estado_secadores",nivel(status),"nivel",quality);
     }
     previousStatus = status;
   }
@@ -182,7 +228,7 @@ void loop() {
     mqtt.loop();
     if (now - lastHeartbeat >= HEARTBEAT_MS) {
       lastHeartbeat = now;
-      mqtt.publish(MQTT_ROOT "/estado", "online", true);
+      publicarEstado();
     }
   }
   delay(10);
