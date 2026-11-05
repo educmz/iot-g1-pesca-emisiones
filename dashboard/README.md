@@ -26,7 +26,7 @@ El anterior `dashboard/js/config.example.js` se conserva como referencia de conf
 2. El dashboard **no verifica HMAC** en el navegador. Esa comprobacion se hace en el Gateway Fog. El panel no debe considerarse una fuente de confianza para actuacion.
 3. Los botones de ataque publican peticiones de simulacion, pero los rechazos deben confirmarse con eventos reales.
 4. El broker de pruebas es publico y puede desconectarse. La URL de Pages puede estar disponible incluso cuando MQTT esta OFF.
-5. Falta sustituir las secciones de ejemplo con evidencias del equipo: captura general de Cirkit, resultados medidos A/B y graficas reales de ThingSpeak.
+5. El enlace al [Cirkit general](https://app.cirkitdesigner.com/project/373d1c97-d707-40e2-8416-f6e8a5aca5a3) ya está registrado en el repositorio, pero falta su captura exportada. También faltan resultados A/B medidos y capturas reales de ThingSpeak para documentar la entrega.
 6. Para integrar ThingSpeak, mantener su **Write API Key solo en** `secrets.h` del Nodo 5 y autorizar expresamente cualquier visualizacion publica del canal.
 
 ## Diseño y gráficos en vivo

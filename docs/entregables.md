@@ -3,7 +3,8 @@
 - [x] Base documental: diagnóstico de ≥5 defectos y requerimiento reescrito (revisar/validar con el equipo).
 - [ ] Contrato MQTT **acordado e implementado** por los cinco nodos.
 - [ ] Reglas y tabla de problemas/nodos revisadas.
-- [ ] Diagrama general Cirkit con 5 nodos, entradas/salidas y tipos de señal.
+- [x] Enlace del [Cirkit general con cinco nodos](https://app.cirkitdesigner.com/project/373d1c97-d707-40e2-8416-f6e8a5aca5a3) registrado.
+- [ ] Captura/exportación del Cirkit general, señales y GPIO verificados contra Wokwi.
 - [ ] Wokwi público o compartido por cada nodo, con firmware, `diagram.json` y `libraries.txt` si aplica.
 - [ ] MQTT: todos publican y gateway recibe, decide, ordena y confirma.
 - [ ] 10 s sin confirmación ⇒ alerta + ventilación máxima; 60 s sin gateway ⇒ encendido preventivo del lavador.
