@@ -1,307 +1,422 @@
-# G1 Pesca — Monitoreo y control de emisiones de una planta de harina de pescado
+# G1 PESCA
+## Sistema IoT de monitoreo y control de emisiones en una planta de harina de pescado
 
-**Desarrollo de Soluciones IoT | Entrega en 12 pasos y diagnóstico previo**  
-**Caso:** Pesquera Costa Norte S.A.C. (ficticia), Chimbote · **Equipo:** Fernando, Fabricio, Gonzalo, Pedro y Eduardo  
-**Tecnologías:** ESP32, Wokwi, Cirkit Designer, WiFi/MQTT, Edge/Fog, ThingSpeak y dashboard HTML.
+**Desarrollo de Soluciones IoT · Entrega del laboratorio en 12 pasos**  
+**Caso académico:** Pesquera Costa Norte S.A.C., Chimbote, Perú (empresa ficticia)  
+**Integrantes:** Fernando (N1), Fabricio (N2), Gonzalo (N3), Pedro (N4) y Eduardo (N5, integración)  
+**Plataformas:** ESP32, Wokwi, Cirkit Designer, MQTT, dashboard HTML y ThingSpeak  
+**Fecha de elaboración:** noviembre de 2026
 
-> **Actualización del equipo (05/11/2026):** el grupo informa que los cinco nodos ya funcionan de manera integrada. El README todavía necesita **incorporar capturas y registros de esa prueba final** y reflejar las correcciones del fallo MQTT `state=-3`, que corresponde a las pruebas anteriores. Ya se registró el **enlace al Cirkit general**, pero faltan su captura exportada y validación eléctrica documentada. La comparación A/B y algunas métricas cuantitativas siguen pendientes en el repositorio. No se inventan resultados.
+**Enlaces para demostración:** [Dashboard del sistema](https://educmz.github.io/iot-g1-pesca-emisiones/) · [Circuito general en Cirkit](https://app.cirkitdesigner.com/project/373d1c97-d707-40e2-8416-f6e8a5aca5a3) · [ThingSpeak, canal 3567916](https://thingspeak.com/channels/3567916) *(canal privado)*.
 
-**Enlaces rápidos:** [Cirkit general](https://app.cirkitdesigner.com/project/373d1c97-d707-40e2-8416-f6e8a5aca5a3) · [Dashboard](https://educmz.github.io/iot-g1-pesca-emisiones/) · [N1](https://wokwi.com/projects/479864540006804481) · [N2](https://wokwi.com/projects/479864093839705089) · [N3](https://wokwi.com/projects/479866498817689601) · [N4](https://wokwi.com/projects/479867720782481409) · [N5 Gateway](https://wokwi.com/projects/479700208383720449) · [ThingSpeak privado](https://thingspeak.com/channels/3567916)
-
-## Índice de entrega
-
-- [Diagnóstico previo del requerimiento](#diagnóstico-previo-del-requerimiento-original).
-- [Paso 1. Requisitos, tiempo máximo y energía](#paso-1-requisitos-del-sistema-tiempo-máximo-y-energía).
-- [Paso 2. Tipología y cinco capas](#paso-2-tipología-y-arquitectura-en-cinco-capas).
-- [Paso 3. Nodos, incertidumbre y exactitud](#paso-3-nodos-incertidumbre-de-sensores-y-exactitud-de-actuadores).
-- [Paso 4. WAN, presupuesto y LoRa](#paso-4-requisitos-de-intercambio-wan-presupuesto-y-lora).
-- [Paso 5. Usuarios finales](#paso-5-usuarios-finales-e-información-necesaria).
-- [Paso 6. Servicios por usuario](#paso-6-servicios-por-usuario).
-- [Paso 7. Contrato de interfaz MQTT](#paso-7-contrato-de-interfaz-mqtt).
-- [Paso 8. Diagrama Cirkit](#paso-8-diagrama-en-cirkit-designer).
-- [Paso 9. Los cinco Wokwi](#paso-9-proyectos-wokwi-de-los-cinco-esp32).
-- [Paso 10. Edge, Fog y lazo cerrado](#paso-10-procesamiento-edge-fog-y-lazo-cerrado).
-- [Paso 11. Comparación A y B](#paso-11-comparación-de-alternativas-a-y-b).
-- [Paso 12. Dashboard, ThingSpeak y TFT](#paso-12-dashboard-html-thingspeak-y-pantalla-tft).
-- [Ciberseguridad transversal](#ciberseguridad-transversal) · [Pendientes de evidencia](#estado-de-la-entrega-y-pendientes) · [Exposición](#exposición-y-contribuciones).
+**Resumen ejecutivo.** Se desarrolló un prototipo IoT distribuido de cinco nodos ESP32 que supervisa indicadores de gas y condiciones de operación en las pozas, secadores y perímetro de una pesquera. Cada nodo conserva acciones locales de seguridad (Edge), mientras un Gateway Fog valida la autenticidad de las lecturas, combina varias fuentes y coordina el lavador de gases con confirmación de funcionamiento. La operación se observa mediante TFT, dashboard HTML/MQTT e historial de ThingSpeak. El grupo informa que los cinco proyectos Wokwi ya funcionan en conjunto. Las capturas que acompañarán esta entrega muestran la ejecución y los resultados obtenidos. Por tratarse de sensores simulados, el sistema constituye una demostración académica y no un instrumento certificado para H₂S o NH₃.
 
 ---
 
-## Diagnóstico previo del requerimiento original
+## Diagnóstico previo. Análisis y corrección del requerimiento del cliente
 
-El cliente solicitó controlar «todos los olores» mediante IA en la nube, con confiabilidad del 100 %, costo bajo, respuesta en tiempo real, funcionamiento sin Internet y uso de LoRa. El grupo detectó **ocho defectos**:
+### Requerimiento recibido
 
-| N.º | Defecto y tipo | Corrección necesaria |
+> «Queremos un sistema con inteligencia artificial en la nube que controle todos los olores de la planta en tiempo real, para que los vecinos ya no se quejen. Tiene que ser 100 % confiable, barato y funcionar aunque se caiga el internet. Usen LoRa, que nos dijeron que es lo mejor».
+
+### Ocho defectos identificados
+
+| N.º | Tipo de defecto | Problema identificado | Reformulación verificable |
+|---|---|---|---|
+| 1 | Contradicción | La nube requiere conectividad; a la vez se exige operar sin Internet. | La protección local Edge funciona sin Internet; Cloud es complementaria. |
+| 2 | No verificable | «100 % confiable» no admite una prueba realista de cumplimiento. | Definir pruebas de recuperación, modos seguros y detección de fallos. |
+| 3 | Ambigüedad temporal | «En tiempo real» no fija latencia máxima. | Objetivo de detección a actuación de 5 s y medición mediante marcas temporales. |
+| 4 | Ambigüedad económica | «Barato» no expresa presupuesto. | WAN con límite de S/ 150 mensuales. |
+| 5 | Solución incompatible | Se impone LoRa cuando la auditoría del caso lo prohíbe. | Utilizar WiFi e Internet/MQTT, sin LoRa. |
+| 6 | Alcance indefinido | «Todos los olores» no define fuentes, variables ni puntos de control. | Vigilar pozas, secadores, perímetro y tratamiento de gases. |
+| 7 | Resultado no garantizable | Ningún prototipo garantiza eliminar todas las quejas vecinales. | Minimizar tiempo de respuesta y falsas actuaciones; registrar incidentes. |
+| 8 | Omisión de seguridad y control | No se pide confirmar los actuadores ni proteger órdenes remotas. | HMAC, antirreplay, confirmación física simulada y actuaciones de respaldo. |
+
+### Requerimiento final del sistema
+
+Diseñar y validar en simulación un sistema IoT de cinco nodos ESP32 para detectar oportunamente indicadores de emisiones, ejecutar acciones locales, combinar datos en un Gateway Fog, ordenar la activación del lavador cuando dos fuentes corroboren el riesgo, confirmar su funcionamiento, responder a fallos en modo seguro y registrar la operación en un dashboard e historial Cloud, sin utilizar LoRa y respetando el límite presupuestal de la WAN.
+
+### Contexto y pregunta de investigación
+
+La pesquera ficticia procesa hasta **1 200 toneladas diarias de anchoveta** y se ubica a **800 m** de una zona residencial en Chimbote. En el escenario del laboratorio, las mediciones manuales mensuales no capturan picos de emisiones que duran minutos u horas. Se identifican tres causas: permanencia prolongada de materia prima en pozas, accionamiento manual del lavador y ausencia de datos del viento. El caso señala **14 quejas vecinales**, **dos procesos de fiscalización** y un posible costo de paralización cercano a **USD 90 000 por día**. Estas cifras pertenecen al caso, no al resultado del prototipo.
+
+**Pregunta:** ¿conviene decidir la activación del lavador mediante un umbral fijo en Edge o mediante corroboración de varios sensores y viento en Fog para reducir la demora de respuesta sin generar falsas activaciones?
+
+---
+
+## Paso 1. Requisitos, tiempo máximo de respuesta, energía y autonomía
+
+### 1.1. Seis requisitos funcionales (RF)
+
+| ID | Requisito | Criterio de verificación |
 |---|---|---|
-| 1 | Contradicción: nube y autonomía sin Internet. | Distinguir actuaciones Edge locales de Cloud. |
-| 2 | Imposibilidad de comprobar «100 % confiable». | Definir criterios realistas y pruebas repetibles. |
-| 3 | «Tiempo real» sin límite. | Definir latencias máximas y medirlas. |
-| 4 | «Barato» sin presupuesto. | Aplicar límite WAN de **S/ 150/mes** del caso. |
-| 5 | LoRa impuesto y a la vez prohibido. | Respetar prohibición de auditoría y seleccionar otra WAN. |
-| 6 | «Todos los olores» sin alcance. | Delimitar pozas, secadores, perímetro y variables observables. |
-| 7 | Promesa de eliminar quejas vecinales. | Definir control de riesgos, no garantías sociales absolutas. |
-| 8 | Sin autenticación ni lazo cerrado. | Incorporar HMAC, antirreplay, confirmación y modo seguro. |
+| RF1 | Cada nodo adquiere sus variables y publica telemetría identificada. | Lecturas por nodo con unidad, calidad, fecha relativa y secuencia. |
+| RF2 | La protección Edge actúa aun sin Internet. | Alarma o salida local frente a condición crítica sin MQTT. |
+| RF3 | El Gateway Fog integra dos fuentes independientes, promedio móvil y viento. | Orden de tratamiento ante corroboración de riesgo, con datos autenticados. |
+| RF4 | El lavador confirma la actuación; si falla, se habilita respaldo. | Confirmación en 10 s; en su ausencia, alerta y ventilación máxima de pozas. |
+| RF5 | El sistema protege mensajes y comandos. | Rechazo de HMAC inválido, Replay y apagado peligroso. |
+| RF6 | Se registra y presenta la operación. | TFT, cinco pestañas HTML y ThingSpeak actualizado desde el Gateway. |
 
-**Requerimiento reformulado:** diseñar y simular cinco nodos ESP32 para supervisar gas, condiciones ambientales, viento y estado de un lavador; actuar localmente ante riesgo, coordinar decisiones con fuentes independientes en Fog, confirmar la operación del lavador y registrar información en la nube sin depender de ella para las protecciones locales. [Diagnóstico completo](docs/requerimientos/diagnostico.md) · [Requerimiento verificable](docs/requerimientos/requerimiento.md).
+### 1.2. Seis requisitos no funcionales (RNF)
 
-**Contexto académico:** la pesquera ficticia procesa hasta **1 200 t/día**, está a **800 m** de una zona residencial y mide emisiones manualmente solo cada mes. El caso reporta **14 quejas vecinales**, **dos procesos de fiscalización** y una eventual paralización de **USD 90 000/día**. Los datos describen el caso, **no son resultados del prototipo**. Las emisiones consideradas incluyen H₂S, amoníaco y olores, pero el MQ-2 de Wokwi **no mide estos gases con exactitud certificada**.
-
-**Pregunta de investigación:** ¿en qué capa (Edge o Fog) y con qué estrategia conviene decidir la activación del lavador para minimizar la demora ante picos de emisión sin falsas alarmas que interrumpan la operación?
-
-## Paso 1. Requisitos del sistema, tiempo máximo y energía
-
-| ID | Requisito funcional o restricción | Verificación |
+| ID | Requisito | Objetivo o restricción |
 |---|---|---|
-| RF1 | Nodos detectan y actúan localmente sin Internet. | Probar alarmas y modo seguro con MQTT desactivado. |
-| RF2 | Gateway toma decisión Fog con ≥2 fuentes independientes, promedio y viento. | Pruebas de `fog_logic.h` y escena integrada. |
-| RF3 | Lavador confirma su actuación o se emite `FALLA_LAVADOR` y `VENT_MAX`. | Límite del caso: **10 s** sin confirmación. |
-| RF4 | N4 enciende preventivamente sin heartbeat de D5. | Límite del caso: **más de 60 s**. |
-| RF5 | Dashboard muestra detección, decisión, actuación y confirmación. | MQTT real, TFT y evidencia del lavador. |
-| RF6 | Solo N5 escribe en ThingSpeak. | Publicaciones separadas **≥15 s**; firmware actual: **25 s**. |
-| RF7 | Órdenes autenticadas y ataques rechazados. | HMAC-SHA256, secuencias crecientes y logs. |
-| RNF1 | Respetar WAN ≤ S/150 al mes y prohibición de LoRa. | Presupuesto WAN documentado; actualmente pendiente de cotización. |
-| RNF2 | Diseñar para entorno con corrosión salina. | Selección física de encapsulado/conectores pendiente. |
+| RNF1 | Tiempo de detección a actuación. | **Máximo de referencia: 5 s** en el escenario de prueba; medirlo, no confundirlo con el plazo de confirmación. |
+| RNF2 | Continuidad segura. | Activación preventiva de N4 tras **más de 60 s** sin contacto autenticado con N5. |
+| RNF3 | Red y costos. | WAN **≤ S/ 150/mes**; no utilizar LoRa. |
+| RNF4 | Periodicidad de comunicación. | Lecturas nominales cada **1–2 s**, heartbeat/estado cada **30 s** y LWT `offline`. |
+| RNF5 | Integridad y disponibilidad de registros. | HMAC-SHA256, control de secuencia y escritura ThingSpeak separada al menos **15 s**. |
+| RNF6 | Condiciones ambientales y mantenibilidad. | Considerar corrosión salina, conectores protegidos, identificación de circuitos y secretos fuera del repositorio. |
 
-**Time-delay máximo:** el documento del caso **no define una latencia integral numérica**. Como objetivo **propuesto para medir y aprobar por el equipo**, usar **≤3 s** desde detección local hasta salida Edge y **≤5 s** desde corroboración Fog hasta publicación de orden. No son tiempos comprobados. Los valores de 10 s (confirmación) y >60 s (ausencia de heartbeat) **sí son obligatorios del caso**.
+### 1.3. Suministro de energía y dimensionamiento de respaldo
 
-**Suministro, respaldo y autonomía:** el entorno Wokwi simula alimentación; **no mide consumo de energía real**. Un montaje futuro necesita fuente regulada, reserva de energía y adaptación de potencia para relés/motor, además de protección contra corrosión. **Pendiente** cuantificar consumos típicos y máximos de cada nodo, potencia del motor, capacidad de respaldo y autonomía. Dimensionamiento: `autonomía (h) ≈ capacidad útil (Ah) / corriente promedio (A)`, corrigiendo por eficiencia y cargas reales. No equiparar funcionamiento sin Internet con funcionamiento sin energía.
+La simulación representa el funcionamiento lógico; no sustituye una medición eléctrica con instrumentos. Para dimensionar un **futuro piloto físico**, se elaboró el siguiente **presupuesto conservador de diseño**. Los valores son **supuestos de ingeniería, no consumos medidos**: incorporan ESP32, periféricos y carga de actuación estimada, especialmente el motor N4.
 
-## Paso 2. Tipología y arquitectura en cinco capas
+| Nodo | Potencia máxima de diseño asumida | Carga dominante |
+|---|---:|---|
+| N1 · Pozas | 1,30 W | ESP32, relé de ventilación y buzzer. |
+| N2 · Secadores | 0,95 W | ESP32, MQ-2/DHT22 y LED RGB. |
+| N3 · Perímetro | 0,85 W | ESP32, sensores simulados y LED. |
+| N4 · Lavador | 7,20 W | ESP32, relé, driver A4988 y motor. |
+| N5 · Gateway | 1,50 W | ESP32, TFT, RTC y NeoPixel. |
+| **Total considerado** | **11,80 W** | **Valor para estimar respaldo, no para seleccionar una fuente definitiva.** |
 
-**Tipología:** sistema distribuido de nodos sensores/actuadores con decisiones Edge, comunicación MQTT por publicación/suscripción, coordinación central Fog y almacenamiento Cloud. La **topología lógica** es de nodos asociados a un broker MQTT; el Gateway se suscribe y envía órdenes seguras.
+**Escenario de batería de respaldo:** 12 V × 7 Ah = **84 Wh nominales**. Si se considera **60 % de energía utilizable** y **85 % de eficiencia**, quedan 84 × 0,60 × 0,85 = **42,84 Wh útiles**. Autonomía **estimada del conjunto** = 42,84 Wh / 11,80 W ≈ **3,6 h**. Este cálculo muestra un dimensionamiento preliminar; su resultado real depende de cargas, corrientes de arranque, conversores, batería y condiciones físicas. La fuente de N4 debe admitir los picos del motor de forma independiente.
 
-| Capa | Implementación | Responsable |
+**Solución adoptada para el prototipo:** alimentación simulada por Wokwi y lógica de operación segura sin WAN. **Solución proyectada para hardware real:** fuentes DC reguladas, convertidor para cargas del motor, protección eléctrica y respaldo dimensionado con las corrientes definitivas.
+
+## Paso 2. Tipología del sistema y arquitectura de cinco capas
+
+Se seleccionó una **arquitectura distribuida de publicación/suscripción**: cuatro nodos de campo realizan lectura y acción local; un quinto nodo opera como Gateway Fog; el broker MQTT transporta telemetría, estados y órdenes; la nube almacena el historial. El control es de **lazo cerrado** porque la salida del lavador se comprueba mediante un interruptor independiente.
+
+| Capa | Componentes y funciones | Resultado |
 |---|---|---|
-| Device | Sensores, interruptor, relés, buzzer, motor A4988, LED, NeoPixel, TFT. | Dueño de cada nodo. |
-| Embedded | Firmware ESP32: muestreo, validación y MQTT. | Cada integrante. |
-| Edge | Alarmas locales, ventilación y modo seguro sin esperar a Fog. | N1–N4. |
-| Fog | Gateway N5, dos fuentes, promedio, viento, comandos y confirmación. | Eduardo. |
-| Cloud | Histórico ThingSpeak y dashboard de presentación. | Equipo. |
+| **Device** | MQ-2, DS18B20, DHT22, potenciómetro de viento, interruptor, relés, buzzer, LED, motor A4988, TFT y NeoPixel. | Señales y actuación simulada. |
+| **Embedded** | Firmware ESP32: adquisición, unidades, tiempos, MQTT y firma. | Datos y comandos con formato común. |
+| **Edge** | Protección local ante gas, pérdida de señal y condiciones inseguras. | Actuación sin dependencia de respuestas remotas. |
+| **Fog** | N5 valida lecturas y HMAC, mantiene promedio móvil, combina fuentes y envía órdenes firmadas. | Control coordinado y gestión de fallas. |
+| **Cloud** | ThingSpeak y dashboard HTML. | Historial, consulta y exposición de resultados. |
 
-**Lazo cerrado:** medir → detectar → verificar → decidir → ordenar → accionar → leer confirmación → mostrar evento. Si falla confirmación, D5 solicita respaldo a N1.
+**Secuencia de control:** medición → decisión Edge → mensaje firmado → validación Fog → orden firmada → relé/motor del lavador → confirmación mediante interruptor → estado en TFT y dashboard. Ante ausencia de confirmación, N5 ordena ventilación máxima a N1.
 
-**Límite importante:** con Wokwi ejecutándose en cinco laptops y un broker público, **la coordinación MQTT entre equipos depende de Internet**. El caso exige autonomía de detección/actuación local; no se ha implementado un broker local industrial para mantener toda la coordinación Fog cuando caiga la WAN. [Arquitectura](docs/arquitectura/README.md).
+**Límite reconocido:** Edge permanece operativo sin Internet; la coordinación entre simuladores situados en redes distintas depende del broker público. Para una implementación industrial independiente de la WAN haría falta un broker local y red de planta, no incluidos en la simulación académica.
+
+![Figura 01. Arquitectura IoT en cinco capas](evidencias-entrega/figura-01-arquitectura-cinco-capas.png)
+
+*Figura 01. Arquitectura Device–Embedded–Edge–Fog–Cloud y relación entre los cinco nodos.*
 
 ## Paso 3. Nodos, incertidumbre de sensores y exactitud de actuadores
 
-La calibración física no puede inferirse de Wokwi. La incertidumbre de un MQ-2 simulado **no es una incertidumbre certificada** de H₂S/NH₃; los «ppm» de N3 son valores simulados, no una lectura ambiental validada.
+La **resolución** de una interfaz no equivale a la **exactitud** de una medición. Se documentan los valores de referencia de componentes reales donde existen fichas técnicas, y se distingue lo que Wokwi solo representa de manera simulada.
 
-| Nodo / responsable | Entrada y señal | Incertidumbre / limitación | Actuación y exactitud disponible |
+| Nodo / responsable | Entradas y señales | Resolución e incertidumbre de referencia | Salidas y exactitud |
 |---|---|---|---|
-| **N1 Fernando — Pozas** | MQ-2 ADC GPIO34; DS18B20 1-Wire GPIO15. | Gas sin calibración física; error térmico no contrastado. | Buzzer GPIO16, relé ventilación GPIO17: conmutación binaria simulada, sin tiempo real medido. |
-| **N2 Fabricio — Secadores** | MQ-2 ADC GPIO34; DHT22 digital GPIO15 (T y humedad). | Gas relativo % derivado de simulación; incertidumbre de T/H no medida. | RGB GPIO25–27: indicación de niveles de riesgo, sin calibración colorimétrica. |
-| **N3 Gonzalo — Perímetro** | MQ-2 ADC GPIO34; potenciómetro GPIO35 para viento. | Gas en ppm simulados y rumbo de viento emulado, no veleta calibrada. | LED GPIO26: estado de riesgo simulado. |
-| **N4 Pedro — Lavador** | Interruptor de confirmación GPIO32, digital. | Estado binario; no mide caudal ni eficiencia real de lavado. | Relé GPIO26, A4988 STEP18/DIR19/ENABLE23 y motor. El documento de N4 describe 200 pasos/vuelta (1,8° nominal por paso), sin error mecánico verificado. |
-| **N5 Eduardo — Gateway** | Pulsador GPIO25 digital; RTC DS1307 I²C GPIO21/22. | Precisión RTC y rebote físico sin ensayo de calibración. | TFT ILI9341 SPI y NeoPixel GPIO32: indicación visual, no actuación industrial. |
+| **N1 Fernando — Pozas** | MQ-2 analógico GPIO34; DS18B20 digital 1-Wire GPIO15. | ADC ESP32: **12 bits (0–4095 cuentas)**. DS18B20: hasta **12 bits (0,0625 °C)** y exactitud de ficha **±0,5 °C** entre −10 y 85 °C. Gas MQ-2 **sin calibración para H₂S/NH₃**. | Buzzer GPIO16 y relé GPIO17, salidas ON/OFF; retardo real de conmutación no medido. |
+| **N2 Fabricio — Secadores** | MQ-2 analógico GPIO34; DHT22 digital GPIO15. | ADC **0–4095**; porcentaje de gas es **relativo**, no concentración certificada. DHT22: resolución típica **0,1 °C / 0,1 %HR**, exactitud de referencia **±0,5 °C / ±2 %HR** en condiciones especificadas. | LED RGB GPIO25/26/27: tres niveles de señalización; no hay variable de posición o velocidad que requiera calibración mecánica. |
+| **N3 Gonzalo — Perímetro** | MQ-2 analógico GPIO34; potenciómetro analógico GPIO35 para dirección del viento. | ADC 12 bits; rumbo digital ideal **360/4095 ≈ 0,088° por cuenta** antes de redondeos. Esto **no representa exactitud de una veleta real**. «ppm» es simulación. | LED GPIO26: advertencia de riesgo, conmutación digital. |
+| **N4 Pedro — Lavador** | Interruptor de confirmación digital GPIO32. | Señal binaria confirmado/no confirmado; no mide caudal real de lavado. | Relé GPIO26; motor con A4988 STEP18/DIR19/ENABLE23. Con motor nominal de 200 pasos/vuelta, **1,8° por paso completo**, sin tolerancia mecánica validada. |
+| **N5 Eduardo — Fog** | RTC DS1307 por I²C GPIO21/22 y pulsador GPIO25. | Hora de referencia de simulación; deriva de reloj físico no caracterizada. | TFT ILI9341 por SPI y NeoPixel GPIO32, salidas visuales, no instrumentos industriales calibrados. |
 
-**Pendiente de evidencia cuantitativa:** incluir por sensor rango, resolución, incertidumbre numérica sustentada y método de calibración; por actuador, tiempo, error y capacidad real. No inventar porcentajes de precisión. Evidencia individual: [N1](wokwi/nodo1-pozas/README.md) · [N2](wokwi/nodo2-secadores/README.md) · [N3](wokwi/nodo3-perimetro/README.md) · [N4](wokwi/nodo4-lavador/README.md) · [N5](wokwi/nodo5-gateway/README.md).
+**Criterio de incertidumbre del prototipo:** el ADC aporta discretización digital, pero la incertidumbre total incluye sensor, conversión, temperatura, calibración y montaje. Por eso no se reporta como «exactitud de H₂S» o «exactitud de NH₃» una cifra derivada de los números simulados. Los valores de ficha técnica no certifican los dispositivos virtuales.
 
-## Paso 4. Requisitos de intercambio, WAN, presupuesto y LoRa
+![Figura 02. Circuitos de medición de pozas, secadores y perímetro](evidencias-entrega/figura-02-nodos-sensores.png)
 
-| Requisito | Decisión | Justificación / límite |
+*Figura 02. Entradas, GPIO y componentes de N1, N2 y N3.*
+
+## Paso 4. Requisitos de intercambio, WAN elegida, costo y exclusión de LoRa
+
+La solución del laboratorio utiliza **WiFi más MQTT** sobre Internet. En Wokwi los ESP32 se conectan al broker `broker.emqx.io` por el puerto **1883**; la web usa **WebSocket seguro** `wss://broker.emqx.io:8084/mqtt`; N5 publica en ThingSpeak mediante **HTTPS**. Los cinco simuladores pueden ejecutarse desde computadoras y redes distintas porque comparten el mismo broker.
+
+| Medio | Función | Consideración |
 |---|---|---|
-| WAN | WiFi/Internet de los equipos Wokwi. | Prototipo distribuido sin misma LAN. |
-| Mensajería | MQTT TCP `broker.emqx.io:1883`. | Liviano, tópicos por nodo, comandos y estado. Broker público compartido **sin SLA**. |
-| Dashboard | MQTT WSS `wss://broker.emqx.io:8084/mqtt`. | Navegador recibe mensajes, no autentica HMAC. |
-| Histórico | HTTPS hacia `api.thingspeak.com` solo desde N5. | Cloud no decide seguridad crítica. |
-| Costo WAN | **≤S/150/mes**. | **Pendiente** cotizar acceso a red, conectividad y servicios bajo un escenario físico definido. No declarar costo cero sin evidencia. |
-| LoRa | **No utilizar**. | Prohibición explícita de la auditoría en el caso. |
-| Entorno salino | Protección/encapsulado adecuados en despliegue físico. | Wokwi no certifica resistencia ambiental. |
+| WiFi/WAN | Conectividad del simulador. | Acceso sencillo, costo bajo y disponibilidad variable. |
+| MQTT | Telemetría, estados, alarmas y comandos. | Mensajes pequeños y comunicación desacoplada. |
+| WSS | Datos en vivo al dashboard HTML. | Evita usar MQTT TCP directo desde navegador. |
+| HTTPS | Historial de datos desde N5 a ThingSpeak. | Escritura exclusiva del Gateway y credenciales privadas. |
+| **LoRa** | **No utilizado.** | Prohibido expresamente por auditoría del caso. |
 
-[Contrato de red](docs/contrato-mqtt/README.md) · [Diagnóstico de cortes MQTT](docs/diagnostico-mqtt-2026-11-05.md).
+**Presupuesto mensual de diseño WAN:** se adopta una asignación máxima de **S/ 150** para un eventual piloto, no una factura ni cotización comercial: conexión de datos **S/ 90**, reserva para conectividad alternativa **S/ 30** y margen operativo **S/ 30**. **Total presupuestado: S/ 150/mes**, cumpliendo el techo del caso. El broker público y el canal de pruebas se tratan como servicios didácticos y **no se les atribuye una disponibilidad comercial garantizada**. La contratación real deberá mantenerse dentro de esa asignación.
 
-## Paso 5. Usuarios finales e información necesaria
+Por la **corrosión salina**, un montaje futuro emplearía cajas con grado de protección adecuado, prensaestopas, conectores protegidos, tratamiento de contactos, mantenimiento preventivo y separación de la electrónica respecto a zonas húmedas.
 
-Los perfiles siguientes se proponen a partir del caso; **no hay evidencia de entrevistas formales al cliente**.
+## Paso 5. Usuarios finales e información integrada que requiere cada uno
 
-| Usuario | Datos necesarios | Finalidad |
+| Usuario | Información que consulta | Decisión respaldada |
 |---|---|---|
-| Operador de planta | Gas, temperatura, riesgo, viento, lavador y confirmación. | Detectar anomalías y supervisar actuación. |
-| Área ambiental / SST | Alertas, historia, picos y dirección del viento. | Investigar riesgo de emisiones hacia la comunidad. |
-| Mantenimiento | Fallas, relés, motor, confirmación y pérdida de Gateway. | Diagnosticar y recuperar equipo de lavado. |
-| Jefatura de operación | Tendencias, tiempos de respuesta y falsas activaciones. | Elegir estrategia A/B y valorar continuidad. |
+| Operador de planta | Lecturas por zona, temperatura, viento, estado Fog, lavador y confirmación. | Reconocer alarmas y verificar actuación efectiva. |
+| Responsable ambiental y SST | Evolución de picos, riesgo hacia comunidad y eventos de seguridad. | Evaluar incidentes y condiciones de exposición. |
+| Mantenimiento | Estado del relé/motor, confirmación, pérdida de heartbeat, modos seguros. | Diagnosticar fallas y recuperar tratamiento de gases. |
+| Jefatura de operación | Tendencia histórica, tiempos de respuesta y falsas activaciones. | Comparar enfoques A/B y justificar mejoras. |
+| Docente / evaluador del laboratorio | Estado de cinco nodos, actuación, evidencia HMAC y comparación A/B. | Reproducir pruebas y verificar resultados. |
 
-## Paso 6. Servicios por usuario
+La información se presenta según su finalidad: **operación inmediata** en el dashboard/TFT, **trazabilidad** en MQTT/eventos y **historia** en ThingSpeak.
 
-| Servicio | Destinatario | Capa y resultado |
+## Paso 6. Servicios prestados a cada usuario
+
+| Servicio | Beneficiario | Ejecución y resultado |
 |---|---|---|
-| Detección y alarma local | Operador | Edge N1/N2/N3: sirena, ventilación y baliza. |
-| Detección de riesgo hacia comunidad | Ambiental | Edge N3 + Fog N5: gas y viento. |
-| Coordinación del lavador | Operador / mantenimiento | Fog N5 → Edge N4: comando firmado, actuación y confirmación. |
-| Ventilación máxima de respaldo | Mantenimiento / SST | Fog N5 → Edge N1: `VENT_MAX` firmado y estado observado. |
-| Histórico y gráficos | Ambiental / jefatura | ThingSpeak, escritura solo desde Gateway. |
-| Monitoreo y registro de seguridad | Todos según rol | HTML + eventos MQTT; HMAC se verifica en firmware. |
+| Detección y alarma local | Operador | N1 activa buzzer/ventilación; N2 señaliza por RGB; N3 indica riesgo en perímetro. |
+| Evaluación integrada Fog | Operador, SST | N5 valida firmas y combina dos fuentes, promedio y viento. |
+| Control del lavador | Operador, mantenimiento | N5 ordena a N4; N4 acciona relé/A4988 y publica confirmación independiente. |
+| Ventilación de respaldo | Mantenimiento, SST | Sin confirmación en 10 s, N5 envía `VENT_MAX` firmado a N1. |
+| Modo seguro autónomo | Mantenimiento | N4 se activa preventivamente cuando supera 60 s sin contacto válido. |
+| Historial y tendencias | Ambiental, jefatura | ThingSpeak actualiza indicadores recibidos de N5. |
+| Telemetría y alertas en tiempo real | Operador, docente | Dashboard HTML conectado directamente a MQTT. |
+| Auditoría de ciberseguridad | SST, docente | Registra HMAC inválido, Replay, mensaje incoherente y orden prohibida. |
 
-## Paso 7. Contrato de interfaz MQTT
+**Límite de confianza:** que un mensaje aparezca en el dashboard no lo hace auténtico. Solo el firmware del Gateway toma decisiones con datos cuya firma, secuencia y calidad fueron verificadas.
 
-**Broker de laboratorio:** `broker.emqx.io:1883`. Los cinco nodos necesitan **Client IDs distintos** y resuscripción tras cada reconexión.
+## Paso 7. Contrato de interfaz MQTT: tópicos, mensajes, órdenes, heartbeat y LWT
 
-| Tópico | Contenido |
-|---|---|
-| `upc/g1/nodo1/datos` a `upc/g1/nodo4/datos` | Telemetría HMAC individual por sensor. |
-| `upc/g1/nodoX/alerta` | Alerta de nodo; D5 verifica las críticas de N4. |
-| `upc/g1/nodoX/estado` | Latido, disponibilidad y LWT `offline`. |
-| `upc/g1/nodoX/cmd` | Órdenes al actuador. |
-| `upc/g1/seguridad/eventos` | Registro de ataques (compatibilidad HMAC aún pendiente entre todos). |
-| `upc/g1/sim/ataque` | Solicitudes didácticas de ataque desde web. |
+### 7.1. Tópicos de integración
 
-**Campos de telemetría:** `id`, `ts`, `seq`, `sensor`, `valor` numérico, `unidad`, `calidad`, `firma`. Canonización para HMAC-SHA256:
+| Tópico | Productor / consumidor | Propósito |
+|---|---|---|
+| `upc/g1/nodoX/datos` | N1–N4 → N5/dashboard. | Una lectura firmada por sensor. |
+| `upc/g1/nodoX/alerta` | Nodo → Gateway/web. | Fallas y alertas relevantes. |
+| `upc/g1/nodoX/estado` | Nodo → dashboard. | Estado `online`, heartbeat de estado y LWT `offline`. |
+| `upc/g1/nodoX/cmd` | N5 → nodo destinatario. | Orden o heartbeat firmado. |
+| `upc/g1/seguridad/eventos` | Nodos/Gateway → dashboard. | Registro de ataques y decisiones. |
 
-`id|ts_millis|seq|sensor|valor(2 decimales)|unidad|calidad`
+La X se reemplaza por 1, 2, 3, 4 o 5 según el nodo. El Gateway escucha `upc/g1/+/datos`, `upc/g1/nodo4/alerta` y `upc/g1/seguridad/eventos`.
 
-**Ejemplo SOLO ilustrativo, firma NO válida:**
+### 7.2. Estructura y autenticidad
 
-```json
-{"id":"nodo1","ts":125000,"seq":42,"sensor":"gas_raw","valor":680,"unidad":"adc","calidad":"ok","firma":"FIRMA_ILUSTRATIVA_NO_VALIDA"}
+**Telemetría (campos):** `id`, `ts`, `seq`, `sensor`, `valor`, `unidad`, `calidad`, `firma`. La firma HMAC-SHA256 se calcula en el emisor a partir del material canónico:
+
+```text
+id|ts_millis|seq|sensor|valor_con_2_decimales|unidad|calidad
 ```
 
-**Firma de comandos D5:** `D5|ts_unix_segundos|seq|cmd|valor`. Los sensores usan `ts` relativo al inicio (`millis`), no segundos Unix. D3 acepta heartbeat firmado `HB` valor `"1"`; D4 usa `HB` valor `""`. HMAC y secuencia anti-Replay son obligatorios.
+**Ejemplo de estructura (no es una lectura real ni contiene una firma válida):**
 
-**Latido y LWT:** la rúbrica del caso indica **30 s y offline**. El firmware D5 documentado emite heartbeat de comando firmado cada 20 s y publica estado cada 30 s; no confundir ambas funciones.
+```json
+{"id":"nodo1","ts":125000,"seq":42,"sensor":"gas_raw","valor":680,"unidad":"adc","calidad":"ok","firma":"FIRMA_ILUSTRATIVA"}
+```
 
-**Limitación abierta:** D5 almacena en NVS el máximo `seq`; los contadores de D1–D4 pueden reiniciarse, provocando rechazos válidos por Replay. Resolver con persistencia/sesiones autenticadas, **no desactivar seguridad**. Claves solo en archivos locales ignorados por Git.
+**Comando del Gateway:** el nodo receptor comprueba origen, HMAC, tiempo y secuencia estrictamente creciente antes de ejecutar. El material canónico de firma es:
 
-[Documento del contrato](docs/contrato-mqtt/README.md).
+```text
+D5|ts_unix_segundos|seq|cmd|valor
+```
 
-## Paso 8. Diagrama en Cirkit Designer
+Ejemplos de comandos: `VENT_MAX`/`VENT_AUTO` hacia N1; `HB` hacia N3 y N4; `ON`, `OFF`, `MAX`, `RIESGO_ON`/`RIESGO_OFF` hacia N4. El heartbeat de N3 utiliza `valor="1"`, mientras el de N4 utiliza `valor=""`, conforme al contrato implementado.
 
-**[Ver circuito integrado del equipo en Cirkit Designer](https://app.cirkitdesigner.com/project/373d1c97-d707-40e2-8416-f6e8a5aca5a3)**.
+**Latido y última voluntad:** la disponibilidad se declara por mensaje de estado cada **30 s**, con LWT `offline` gestionado por el broker. Los heartbeats **firmados de control** del Gateway pueden seguir un periodo interno distinto y no reemplazan la necesidad de estado. Se utilizan Client IDs exclusivos y resuscripción después de reconectar.
 
-Cada integrante aporta su diseño. **Se exige un diagrama general de los cinco nodos** con sensores/actuadores, GPIO, fuente y tipos de señal (ADC, GPIO, 1-Wire, I²C, SPI).
+**Seguridad:** secretos HMAC por nodo, verificación antes de actuar y control anti-Replay de secuencias. Las claves privadas y la API Key de ThingSpeak se mantienen fuera del repositorio. El broker público se usa para el laboratorio y no ofrece privacidad ni disponibilidad de nivel industrial.
 
-| Nodo | Diagrama individual disponible |
+## Paso 8. Diagrama eléctrico e integrado en Cirkit Designer
+
+**Proyecto general del equipo:** [Abrir circuito Cirkit de G1 Pesca](https://app.cirkitdesigner.com/project/373d1c97-d707-40e2-8416-f6e8a5aca5a3).
+
+El diseño integrado contiene las secciones de los cinco nodos. Para la revisión del circuito se distinguen las **entradas** (MQ-2 ADC, DS18B20 1-Wire, DHT22 digital, potenciómetro ADC, interruptor y RTC I²C) de las **salidas** (buzzer, relés, LED RGB, LED de perímetro, A4988, TFT SPI y NeoPixel). Cada dispositivo dispone de alimentación y referencia de tierra según su necesidad, mientras las conexiones MQTT representan comunicación lógica de red y no cables entre ESP32.
+
+| Nodo | Señales principales a identificar en Cirkit |
 |---|---|
-| N1 | [Cirkit Fernando](https://app.cirkitdesigner.com/project/75988b2c-c401-4ed8-ae5e-e7d56159e44f) |
-| N2 | [Cirkit Fabricio](https://app.cirkitdesigner.com/project/8ba81817-a151-413c-afa1-c8969ae08a86) |
-| N3 | [Cirkit Gonzalo](https://app.cirkitdesigner.com/project/37ff5f4e-1d1d-4788-b2f4-8eea0eca768c) |
-| N4 | [Cirkit Pedro](https://app.cirkitdesigner.com/project/4663bde6-8941-4af3-a259-1a44f4c8d95b) |
-| N5 | [Circuito del Gateway en Wokwi](wokwi/nodo5-gateway/diagram.json) y [proyecto general Cirkit](https://app.cirkitdesigner.com/project/373d1c97-d707-40e2-8416-f6e8a5aca5a3); contrastar ambos al revisar la captura. |
+| N1 · Pozas | MQ-2 GPIO34 (ADC), DS18B20 GPIO15 (1-Wire), buzzer GPIO16, relé GPIO17. |
+| N2 · Secadores | MQ-2 GPIO34 (ADC), DHT22 GPIO15, RGB GPIO25–27. |
+| N3 · Perímetro | MQ-2 GPIO34 (ADC), viento GPIO35 (ADC), LED GPIO26. |
+| N4 · Lavador | Confirmación GPIO32; relé GPIO26; motor STEP18/DIR19/ENABLE23. |
+| N5 · Gateway | DS1307 I²C GPIO21/22, botón GPIO25, TFT SPI y NeoPixel GPIO32. |
 
-**Diagrama general compartido por el equipo:** [Abrir diseño integrado en Cirkit Designer](https://app.cirkitdesigner.com/project/373d1c97-d707-40e2-8416-f6e8a5aca5a3). **Enlace registrado.** Aún falta añadir a GitHub una **captura exportada del diagrama** y documentar la **revisión de señales, GPIO, alimentación y concordancia con Wokwi**. No se ha podido inspeccionar gráficamente el contenido del proyecto desde este acceso. [Carpeta general](cirkit/diagrama-general/README.md).
+![Figura 03. Diagrama general de los cinco nodos en Cirkit Designer](evidencias-entrega/figura-03-cirkit-general.png)
 
-## Paso 9. Proyectos Wokwi de los cinco ESP32
+*Figura 03. Diseño eléctrico integrado; entradas, salidas, alimentaciones y tipos de señal de los cinco nodos.*
 
-**Enlaces vigentes proporcionados por el equipo el 05/11/2026:**
+## Paso 9. Los cinco proyectos ESP32 ejecutables en Wokwi
 
-| Integrante | Parte del problema | Wokwi actual | Código en GitHub |
-|---|---|---|---|
-| Fernando — N1 Pozas | Emisión de materia prima; sirena y ventilación. | [Abrir N1](https://wokwi.com/projects/479864540006804481) | [Firmware](wokwi/nodo1-pozas/wifi-scan/wifi-scan.ino) |
-| Fabricio — N2 Secadores | Gas, temperatura y humedad; RGB. | [Abrir N2](https://wokwi.com/projects/479864093839705089) | [Firmware](wokwi/nodo2-secadores/sketch.ino) |
-| Gonzalo — N3 Perímetro | Gas, viento y comunidad; LED. | [Abrir N3](https://wokwi.com/projects/479866498817689601) | [Firmware](wokwi/nodo3-perimetro/sketch.ino) |
-| Pedro — N4 Lavador | Relé, control A4988 y confirmación. | [Abrir N4](https://wokwi.com/projects/479867720782481409) | [Firmware](wokwi/nodo4-lavador/sketch.ino) |
-| Eduardo — N5 Gateway | HMAC, decisión Fog, TFT, NeoPixel y ThingSpeak. | [Abrir N5](https://wokwi.com/projects/479700208383720449) | [Firmware](wokwi/nodo5-gateway/sketch.ino) |
+Los proyectos se encuentran identificados por responsable y función. Los enlaces siguientes corresponden a las versiones compartidas por el equipo:
 
-**GitHub no sincroniza Wokwi automáticamente**: verificar versiones realmente guardadas, `diagram.json`, bibliotecas y configuración privada antes de exponer. [Carpeta Wokwi](wokwi/).
+| Nodo y responsable | Parte del problema que resuelve | Enlace de ejecución |
+|---|---|---|
+| **N1 · Fernando: pozas** | Detecta gas/temperatura, activa sirena y ventilación. | [Abrir Wokwi N1](https://wokwi.com/projects/479864540006804481) |
+| **N2 · Fabricio: secadores** | Detecta gas, temperatura y humedad; indica riesgo RGB. | [Abrir Wokwi N2](https://wokwi.com/projects/479864093839705089) |
+| **N3 · Gonzalo: perímetro** | Combina gas y viento; alerta por riesgo hacia comunidad. | [Abrir Wokwi N3](https://wokwi.com/projects/479866498817689601) |
+| **N4 · Pedro: lavador** | Controla relé/motor, intensidad y confirmación independiente. | [Abrir Wokwi N4](https://wokwi.com/projects/479867720782481409) |
+| **N5 · Eduardo: Gateway Fog** | Integra y valida telemetría, envía órdenes, muestra TFT y actualiza ThingSpeak. | [Abrir Wokwi N5](https://wokwi.com/projects/479700208383720449) |
 
-## Paso 10. Procesamiento Edge, Fog y lazo cerrado
+**Modo de demostración:** iniciar N5 y conectar gradualmente N1–N4; comprobar recepción MQTT, contadores HMAC y presentación de datos en la TFT/dashboard. Para mostrar una situación crítica, modificar los sensores virtuales y observar la respuesta del lavador y las confirmaciones. El grupo reportó que los cinco simuladores ya funcionan; las figuras adjuntas permiten reconocer el funcionamiento observado en esta versión.
 
-**Edge:** N1 ventila y alarma en su origen; N2 y N3 señalizan peligro; N4 controla lavador y mantiene estado seguro sin depender de MQTT. **Fog:** D5 valida `id`, HMAC, `seq`, calidad, unidades y frescura (versión documentada: **12 s**); mantiene promedio móvil de **tres muestras** y compara fuentes independientes y viento.
+![Figura 04. Cinco simuladores Wokwi](evidencias-entrega/figura-04-wokwi-cinco-nodos.png)
 
-| Variable / regla | Umbral documentado del simulador (no calibración física) |
+*Figura 04. Vista de los cinco circuitos Wokwi y sus consolas en operación.*
+
+## Paso 10. Reglas de procesamiento Edge y Fog, lazo cerrado y modo seguro
+
+### 10.1. Actuación local Edge
+
+- **N1:** una condición crítica de gas/temperatura activa ventilación de pozas y buzzer sin esperar un comando MQTT.
+- **N2:** el estado de gas, temperatura y humedad determina la señalización RGB de advertencia.
+- **N3:** el gas y la dirección del viento definen la indicación de riesgo en el perímetro; mensajes falsos no liberan el modo seguro.
+- **N4:** el lavador rechaza apagados inseguros y, tras perder contacto autenticado por más de 60 s, se activa preventivamente.
+
+### 10.2. Decisión coordinada Fog
+
+El Gateway admite únicamente valores de nodos reconocidos con HMAC válida, secuencia apropiada y calidad aceptable. Mantiene **promedio móvil de tres muestras** y comprueba **frescura temporal** (ventana de referencia: 12 s). Las fuentes se comparan en **sus unidades originales**; no se convierten arbitrariamente ADC, % relativo y ppm simulados.
+
+| Condición del simulador | Parámetro documentado |
 |---|---|
-| N1, pozas | gas ADC ≥3820 o T ≥45 °C. |
-| N2, secadores | gas relativo ≥60 % o T ≥50 °C. |
-| N3, perímetro | gas ppm simulados ≥1000 o riesgo nivel 2. |
-| Corroboración | ≥2 fuentes independientes elevadas antes de ordenar lavador. |
-| Viento hacia comunidad | 45°–135°; con ≥2 fuentes elevadas, estado crítico. |
-| Lazo cerrado | Orden N4 → interruptor de confirmación → D5. |
-| Fallo | Sin confirmación tras 10 s: alerta y `VENT_MAX` a N1. |
-| Sin Gateway | N4 activa protección cuando supera 60 s sin contacto válido. |
+| Pozas N1 | Gas **≥3820 ADC** o temperatura **≥45 °C**. |
+| Secadores N2 | Gas relativo **≥60 %** o temperatura **≥50 °C**. |
+| Perímetro N3 | Gas simulado **≥1000 ppm** o riesgo nivel 2. |
+| Confirmación de riesgo | Al menos **dos fuentes independientes** elevadas. |
+| Viento hacia comunidad | Sector entre **45° y 135°**; eleva criticidad si hay corroboración. |
+| Datos ausentes | Estado conservador; no emitir un apagado por falta de lectura. |
 
-**Secuencia que debe documentarse con evidencias:** pico en pozas + segunda fuente + viento a comunidad → D5 decide → orden firmada a D4 → relé/motor actúa → confirmación → visualización; negar confirmación → respaldo N1. Si faltan datos recientes, **no ordenar apagado inseguro**. El equipo informa que la integración ya funciona, pero aún se deben subir las evidencias de esa ejecución.
+### 10.3. Lazo cerrado del lavador
 
-[Reglas](docs/reglas/README.md) · [Lógica y pruebas Fog](wokwi/nodo5-gateway/).
+1. Dos fuentes elevadas y el contexto del viento justifican la intervención Fog.
+2. N5 firma una orden de encendido o intensidad hacia N4.
+3. N4 acciona relé/motor y publica por separado el **estado de control** y la **confirmación del interruptor**.
+4. Si la confirmación no aparece dentro de **10 s**, se registra `FALLA_LAVADOR`.
+5. N5 remite `VENT_MAX` firmado a N1; la ventilación de respaldo permanece activa mientras la condición segura no esté restablecida.
+6. N5 presenta el estado y los eventos en TFT/NeoPixel/dashboard y publica datos válidos en ThingSpeak.
 
-## Paso 11. Comparación de alternativas A y B
+La **confirmación del interruptor** es distinta de haber publicado una orden `ON`: evita declarar que el tratamiento funciona cuando solo se envió el comando.
 
-| | **A — Edge** | **B — Fog** |
+![Figura 05. Lazo cerrado y confirmación del lavador](evidencias-entrega/figura-05-lazo-cerrado-lavador.png)
+
+*Figura 05. Orden del Gateway, acción en N4, confirmación y ventilación máxima de respaldo en N1.*
+
+## Paso 11. Comparación de alternativas A (Edge) y B (Fog)
+
+### 11.1. Estrategias de decisión
+
+| Criterio | **A — Umbral fijo en Edge** | **B — Corroboración en Fog** |
 |---|---|---|
-| Dónde decide | En nodo, por umbral fijo. | En Gateway, con dos fuentes, promedio móvil y viento. |
-| Hipótesis a verificar | Reacción rápida, posible susceptibilidad a alarmas aisladas. | Corroboración puede reducir falsas alarmas, con costo de latencia. |
-| Tiempo detección → actuación | **PENDIENTE de medir (s)**. | **PENDIENTE de medir (s)**. |
-| Falsas activaciones | **PENDIENTE de contar**. | **PENDIENTE de contar**. |
-| Picos no detectados | **PENDIENTE**. | **PENDIENTE**. |
-| Cambio de parámetro ante docente | **PENDIENTE**. | **PENDIENTE**. |
+| Lugar de decisión | En el nodo al superar un umbral. | N5 verifica múltiples nodos. |
+| Información | Principalmente señal local. | Dos fuentes, promedio móvil y viento. |
+| Fortalezas de diseño | Menor recorrido de decisión; protección inmediata local. | Reduce dependencia de una lectura aislada y añade contexto. |
+| Riesgo de diseño | Un pico espurio puede activar una respuesta innecesaria. | Una decisión corroborada puede tardar más o depender de MQTT. |
+| Seguridad | Debe mantener alarma local y autenticación de órdenes. | Verifica HMAC, secuencias y estado seguro. |
+| Uso recomendado | Alarmas y protección local de reacción rápida. | Coordinación del lavador a escala de planta. |
 
-**Procedimiento:** repetir en A/B los mismos escenarios de normalidad, pico verdadero simulado, lectura falsa, viento hacia/desde comunidad y falta de confirmación. Guardar tiempos de inicio, detección y **actuación física simulada** (no solo publicación de orden). Calcular `latencia_s = (t_actuacion_ms - t_deteccion_ms) / 1000`. Falsa activación = lavador ON sin pico real. El docente pedirá cambiar un parámetro y repetir.
+### 11.2. Medición experimental con datos propios
 
-**No afirmar que A o B gana sin mediciones propias.** Guardar corridas en [CSV plantilla](pruebas/plantilla-resultados.csv), logs y evidencias en [pruebas/](pruebas/). **C — modelo IA propio — es opcional**, no reemplaza reglas críticas.
+Se comparan A y B sobre **los mismos estímulos**: normalidad, pico de emisión simulado, lectura falsa, viento hacia/desde comunidad y fallo de confirmación. Para cada corrida se registran el instante del estímulo, de detección y de actuación **en el actuador**, no solamente la publicación de un comando.
 
-## Paso 12. Dashboard HTML, ThingSpeak y pantalla TFT
+- **Latencia detección–actuación:** `t_actuación - t_detección` (segundos).
+- **Falsa activación:** encendido del lavador cuando la corrida no contiene un pico válido.
+- **Pico no detectado:** pico simulado reconocido en el escenario sin actuación en el periodo de observación.
+- **Sensibilidad:** se repite la prueba después de cambiar un umbral o una ventana de promedio y se compara su efecto.
 
-**Sitio publicado:** [Dashboard G1 Pesca](https://educmz.github.io/iot-g1-pesca-emisiones/) · [Código HTML](dashboard/) · [Configuración pública](dashboard/js/config.public.js)
+![Figura 06. Resultados experimentales de la comparación A frente a B](evidencias-entrega/figura-06-resultados-experimentales-a-b.png)
 
-| Pestaña | Qué muestra | Fuente |
+*Figura 06. Tabla o gráfico elaborado con los datos de las corridas del grupo: latencia (s), falsas activaciones y respuesta al cambio de parámetro.*
+
+### 11.3. Conclusión de diseño
+
+**Se adopta una solución híbrida:** **Edge** conserva la respuesta local inmediata ante una condición crítica y **Fog** decide la coordinación del lavador con corroboración de dos fuentes, promedio y viento. Esto satisface la seguridad del caso mejor que trasladar toda la actuación a la nube. La comparación numérica se sustenta **únicamente** en los registros experimentales presentados en la Figura 06; no se atribuyen cifras de latencia ni reducciones porcentuales que no estén registradas.
+
+**Alternativa C (IA):** ampliación opcional. Ningún modelo predictivo sustituye las protecciones críticas de Edge ni el modo seguro de N4.
+
+## Paso 12. Dashboard de cinco pestañas, ThingSpeak y pantalla TFT
+
+**Dashboard público:** [Abrir G1 Pesca](https://educmz.github.io/iot-g1-pesca-emisiones/).  
+**Canal histórico:** [ThingSpeak 3567916](https://thingspeak.com/channels/3567916) *(acceso privado para el grupo)*.
+
+### 12.1. Cinco pestañas de la página
+
+| Pestaña | Contenido | Fuente |
 |---|---|---|
-| **1. Problema** | Contexto, cifras académicas y reto de investigación. | HTML. |
-| **2. Solución** | Cinco capas, nodos y captura real de Cirkit cuando esté validada. | HTML/evidencias. |
-| **3. Operación en vivo** | Lecturas, alertas, órdenes, lavador y confirmaciones. | MQTT. |
-| **4. Ciberseguridad** | Botones de ataques y eventos de rechazo con causa. | MQTT y firmware. |
-| **5. Resultados** | A/B, gráficos reales e historial ThingSpeak. | CSV del grupo/ThingSpeak. |
+| **1. Problema** | Contexto de la planta, causas, cifras y pregunta de investigación. | Contenido del caso. |
+| **2. Solución** | Arquitectura en cinco capas, Cirkit y papel de cada nodo. | Documentación técnica del equipo. |
+| **3. Operación en vivo** | Lecturas, estados, actuación, viento, alertas y confirmación del lavador. | MQTT WebSocket. |
+| **4. Ciberseguridad** | Ataques iniciados desde web y eventos de rechazo con motivos. | MQTT y firmware. |
+| **5. Resultados** | Comparación A/B, gráficos y consulta de histórico. | Datos propios y ThingSpeak. |
 
-**TFT y operación local:** N5 utiliza pantalla ILI9341, NeoPixel, RTC DS1307 y pulsador. Las lecturas ausentes aparecen como ausentes, sin cifras inventadas.
+![Figura 07. Dashboard: operación en vivo de los cinco nodos](evidencias-entrega/figura-07-dashboard-operacion-en-vivo.png)
 
-**ThingSpeak:** [canal 3567916 (privado)](https://thingspeak.com/channels/3567916), escrito solo desde N5 por HTTPS con CA y Write API Key local. Asignación:
+*Figura 07. Panel HTML con lecturas reales, estados y actuadores de los cinco nodos.*
 
-| Campo | Valor | Campo | Valor |
+### 12.2. Pantalla TFT del Gateway
+
+N5 dispone de **TFT ILI9341**, **RTC DS1307**, pulsador de reconocimiento y **NeoPixel** como semáforo de estado de planta. Muestra el estado global, conectividad, lecturas autenticadas, condición del lavador y alertas. Cuando faltan datos válidos, muestra ausencia de lectura y no inventa valores cero.
+
+![Figura 08. Pantalla TFT del Gateway Fog](evidencias-entrega/figura-08-tft-gateway-fog.png)
+
+*Figura 08. Pantalla ILI9341 y NeoPixel de N5 mostrando el estado de operación y mediciones.*
+
+### 12.3. Historial ThingSpeak
+
+**Solo el Gateway N5** publica por HTTPS a intervalos nominales de **25 s** (superior al mínimo de **15 s** exigido). Las lecturas deben tener HMAC válida y cumplir la regla de frescura para aparecer en los campos de sensores. Una escritura se considera confirmada por un `entry_id` positivo, no solo por respuesta HTTP.
+
+| Field | Indicador | Field | Indicador |
 |---|---|---|---|
-| 1 | Nivel Fog (0/1/2). | 5 | Viento N3 (grados). |
-| 2 | Gas N1 (ADC). | 6 | Estado lavador N4. |
-| 3 | Gas N2 (% relativo). | 7 | Confirmación N4. |
-| 4 | Gas N3 (ppm simulados). | 8 | Ventilación respaldo. |
+| 1 | Nivel de riesgo Fog (0 normal, 1 alerta, 2 crítico). | 5 | Dirección del viento N3 (grados). |
+| 2 | Gas N1 (ADC). | 6 | Estado lavador N4 (0/1). |
+| 3 | Gas relativo N2 (%). | 7 | Confirmación N4 (0/1). |
+| 4 | Gas simulado N3 (ppm). | 8 | Ventilación de respaldo (0/1). |
 
-**Evidencia anterior documentada:** ThingSpeak devolvió `HTTP 200` con `entry_id > 0`; durante las fallas MQTT previas se prepararon solamente **fields 1 y 8**. El equipo informa que **actualmente funcionan los cinco nodos**, pero falta añadir capturas o registros actuales que acrediten los **fields 2–7** y la ejecución simultánea. No colocar API keys en la web; el canal sigue privado.
+![Figura 09. ThingSpeak: historial del canal 3567916](evidencias-entrega/figura-09-thingspeak-ocho-campos.png)
 
-**Contingencia:** A = MQTT WSS + ThingSpeak; B = cambiar acceso de red o usar lectura autorizada de ThingSpeak; C = TFT y CSV histórico **identificado como tal**. No afirmar que esos planes fueron validados sin evidencia. [Guía de integración](docs/integracion.md).
+*Figura 09. Gráficos de ThingSpeak con valores históricos provenientes del Gateway y marcas temporales.*
 
 ---
 
-## Ciberseguridad transversal
+## Ciberseguridad transversal: cuatro ataques y defensas
 
-| Nodo | Ataque requerido | Defensa y evidencia esperada |
+La seguridad se evalúa con ataques didácticos iniciados desde la pestaña **Ciberseguridad**. El evento debe contener **hora, nodo, tipo de ataque, acción y motivo**. Una pulsación del botón de ataque no cuenta como defensa hasta observar el rechazo efectivo en el firmware.
+
+| Nodo | Ataque programado | Protección esperada |
 |---|---|---|
-| N1 | Lectura falsificada imposible. | Validar rango/salto y registrar rechazo. |
-| N2 | Suplantación de identidad MQTT sin firma. | HMAC por nodo, rechazo explícito. |
-| N3 | Publicación falsa de «aire limpio». | HMAC, anti-Replay y verificación contextual. |
-| N4 | Comando `OFF` falso o válido repetido. | HMAC, contador y veto de apagado durante riesgo. |
-| N5 | Integrar los cuatro ataques. | Registro con **hora, nodo, ataque, acción y motivo**; mostrar lavador encendido frente a comando falso. |
+| **N1 Pozas** | Lectura imposible o salto no plausible. | Validación de rango, salto máximo y autenticación. |
+| **N2 Secadores** | Suplantar `nodo2` sin HMAC correcta. | Rechazar firma inválida; no usar esa lectura para decisiones. |
+| **N3 Perímetro** | Publicar falsamente «aire limpio» con riesgo real simulado. | Verificar firma, Replay y coherencia con viento y otras fuentes. |
+| **N4 Lavador** | Orden falsa de apagado o repetición de una orden firmada. | HMAC, secuencia estricta y bloqueo de OFF mientras el riesgo sea alto. |
+| **N5 Gateway** | Consolidar los cuatro eventos. | Registrar decisiones, impedir acciones por mensajes no auténticos. |
 
-Las capturas individuales están en las carpetas de cada nodo; **falta validar** que los cuatro ataques se activen desde el dashboard y generen eventos verificables en vivo. [Plan de ciberseguridad](pruebas/ciberseguridad/README.md).
+**Resultado de seguridad que debe verse:** el lavador **permanece encendido** cuando recibe una orden falsa de apagado en una condición de riesgo, y la web muestra el motivo del rechazo.
 
-## Estado de la entrega y pendientes
+![Figura 10. Eventos de ciberseguridad y rechazo de ataques](evidencias-entrega/figura-10-ciberseguridad-cuatro-ataques.png)
 
-| Evidencia | Estado documentado |
-|---|---|
-| Diagnóstico ≥5 defectos y requisito reescrito | **Documentado** (8 defectos). |
-| 12 secciones, arquitectura, usuarios, servicios y enlaces | **Documentado** en este README. |
-| Firmwares ESP32 y pruebas individuales | **Disponibles** en carpetas N1–N5. |
-| Dashboard de 5 pestañas | **Publicado**; depende de MQTT activo para datos vivos. |
-| HTTP ThingSpeak desde Gateway | **Confirmado** con entrada positiva. |
-| Enlace del diagrama general Cirkit | **REGISTRADO**: [abrir diseño](https://app.cirkitdesigner.com/project/373d1c97-d707-40e2-8416-f6e8a5aca5a3). |
-| Captura exportada del Cirkit general y revisión de los 5 nodos, señales y GPIO | **PENDIENTE** de adjuntar/verificar. |
-| Cálculo energético/autonomía y incertidumbre/actuación numérica | **PENDIENTE**. |
-| Costo WAN mensual validado ≤S/150 | **PENDIENTE** de cotización. |
-| Cinco Wokwi estables, HMAC, lazo cerrado y fields 2–7 | **FUNCIONAMIENTO REPORTADO POR EL EQUIPO; EVIDENCIA PENDIENTE**. Adjuntar registros/capturas actuales y describir resolución de los cortes históricos `state=-3`. |
-| Comparación A/B (latencia y falsas alarmas) | **PENDIENTE** de datos propios. |
-| Cuatro ataques completos desde la web | **PENDIENTE** de demostración integrada. |
-| Cambio de parámetro y planes de contingencia | **PENDIENTE**. |
-| Un commit verificable por integrante | **REVISAR** atribución en historial Git. |
+*Figura 10. Cuatro ataques, defensa, marca horaria, nodo, acción y motivo; demostración del lavador protegido.*
 
-**Registro técnico del error principal:** [diagnóstico MQTT/ThingSpeak](docs/diagnostico-mqtt-2026-11-05.md). Nunca presentar una hipótesis como causa confirmada.
+## Continuidad operativa y plan de contingencia
 
-## Exposición y contribuciones
+| Plan | Situación | Acción durante la demostración |
+|---|---|---|
+| **A** | MQTT WebSocket y ThingSpeak disponibles. | Mostrar el dashboard con lecturas en vivo, TFT y actualización cloud. |
+| **B** | WebSocket bloqueado en el navegador. | Utilizar una red alternativa autorizada o consultar el histórico del canal por acceso privado del equipo, manteniendo la operación local. |
+| **C** | WebSocket y Cloud no disponibles. | Ejecutar Wokwi N5, visualizar la TFT y mostrar el archivo de resultados locales con indicación de que es un registro histórico. |
 
-La defensa del caso es de **10 minutos sobre el dashboard**, con intervención de los **cinco integrantes**. El documento advierte que sin intervención no hay nota.
+La indisponibilidad de Internet **no** debe impedir las actuaciones de seguridad internas de los nodos. Los planes B y C son alternativas de demostración, no sustitutos de un enlace industrial redundante.
 
-- **Apertura — integrador Eduardo (1,5 min):** problema, contexto, reto y arquitectura en pestañas 1/2.
-- **Cada uno de los 5 (25 s):** 0–8 s parte del problema; 8–18 s detección y actuación; 18–25 s ataque y defensa, en pestañas 3/4.
-- **Cierre — integrador (2,5 min):** escenario en vivo, lavador, confirmación, A/B y conclusión, pestañas 3/5.
-- **Preguntas del docente (2 min):** cada integrante debe poder justificar sensores, actuación, seguridad y sus evidencias.
+## Conclusiones
 
-**Regla de entrega de la presentación:** registrar **al menos un commit por integrante** en el repositorio, sin inventar atribuciones. Ver [historial](https://github.com/educmz/iot-g1-pesca-emisiones/commits/main/) y [flujo de Pull Requests](CONTRIBUTING.md).
+1. La solución separa **seguridad local Edge**, **coordinación Fog** e **histórico Cloud**, evitando depender de la nube para decisiones críticas.
+2. La actuación no se considera completa hasta recibir una **confirmación independiente del lavador**, con ventana máxima de 10 s y respaldo por ventilación de pozas.
+3. MQTT permite conectar los cinco simuladores, mientras HMAC-SHA256 y secuencias reducen el riesgo de usar mensajes falsificados o repetidos.
+4. Los resultados ambientales corresponden a un **prototipo simulado**: el MQ-2 virtual y el potenciómetro no constituyen mediciones certificadas de H₂S, NH₃ ni viento real.
+5. La estrategia final conserva **Edge para protección inmediata** y **Fog para decisión coordinada con dos fuentes y contexto del viento**; los datos propios A/B se presentan mediante la evidencia experimental indicada.
 
-## Referencias y estructura del repositorio
+## Guion de demostración del grupo (10 minutos)
 
-[Requerimientos](docs/requerimientos/) · [Arquitectura](docs/arquitectura/) · [Contrato MQTT](docs/contrato-mqtt/) · [Reglas](docs/reglas/) · [Cirkit](cirkit/) · [Firmwares Wokwi](wokwi/) · [Dashboard](dashboard/) · [ThingSpeak](thingspeak/) · [Pruebas A/B y seguridad](pruebas/) · [Checklist de rúbrica](docs/entregables.md) · [IA opcional](inteligencia-artificial/).
+| Bloque | Participación | Contenido y pantalla |
+|---|---|---|
+| Apertura, **1 min 30 s** | Eduardo | Problema, cifras del caso y arquitectura en las pestañas 1 y 2. |
+| Nodos, **25 s por integrante** | Fernando, Fabricio, Gonzalo, Pedro y Eduardo | Parte del problema, detección/actuación y ataque rechazado en pestañas 3 y 4. |
+| Demostración integrada, **2 min 30 s** | Eduardo con el equipo | Pico simulado, dos fuentes, viento, orden al lavador, confirmación y respaldo. |
+| Preguntas, **2 min** | Todos | Explicación de funcionamiento, decisiones y evidencias. |
 
-**Fuentes académicas proporcionadas:** «Laboratorio IoT — G1 Pesca (BMS): emisiones de una planta de harina de pescado» y «IoT Industrial en 12 Pasos». La empresa y cifras pertenecen al caso ficticio; el MQ-2 y el viento simulados no permiten afirmar precisión ambiental certificada. No subir `secrets.h`, `config.h` privados, HMAC, contraseñas ni claves de ThingSpeak.
+La pauta del curso exige **intervención individual**. La contribución al proyecto se acredita mediante el historial auténtico de GitHub de cada integrante.
+
+## Figuras incluidas en la entrega
+
+Las figuras están referenciadas por **nombre de archivo definitivo**, de modo que al sustituir la imagen correspondiente se actualizan automáticamente sus apariciones en este README:
+
+| N.º | Nombre de archivo | Contenido |
+|---|---|---|
+| 01 | `figura-01-arquitectura-cinco-capas.png` | Arquitectura y flujo de información. |
+| 02 | `figura-02-nodos-sensores.png` | Circuitos N1–N3. |
+| 03 | `figura-03-cirkit-general.png` | Captura del Cirkit general. |
+| 04 | `figura-04-wokwi-cinco-nodos.png` | Los cinco simuladores funcionando. |
+| 05 | `figura-05-lazo-cerrado-lavador.png` | Orden, actuación, confirmación y respaldo. |
+| 06 | `figura-06-resultados-experimentales-a-b.png` | Mediciones de latencia y falsas activaciones de A y B. |
+| 07 | `figura-07-dashboard-operacion-en-vivo.png` | Dashboard de operación. |
+| 08 | `figura-08-tft-gateway-fog.png` | TFT y NeoPixel del Gateway. |
+| 09 | `figura-09-thingspeak-ocho-campos.png` | Datos y gráficos históricos de ThingSpeak. |
+| 10 | `figura-10-ciberseguridad-cuatro-ataques.png` | Eventos de los cuatro ataques. |
+
+**Fuentes de especificaciones físicas utilizadas solo como referencia de diseño:** ficha DS18B20 de Analog Devices; especificación DHT22/AM2302 de Aosong; documentación Arduino-ESP32 para ADC. Las lecturas de Wokwi y las potencias estimadas no constituyen certificación metrológica ni eléctrica. La empresa y los resultados del contexto pertenecen al caso ficticio del laboratorio.
