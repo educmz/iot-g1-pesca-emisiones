@@ -19,10 +19,13 @@ Lectura falsificada imposible; validación de rango y salto máximo.
 - Código de tu panel/botón de ataque integrado en la carpeta que acuerdes con Eduardo.
 
 ## Registro de entrega
-- **Enlace Wokwi:** PENDIENTE
-- **Enlace Cirkit (sección de nodo):** PENDIENTE
-- **Publicación MQTT:** PENDIENTE
-- **Actuación comprobada:** PENDIENTE
-- **Ataque rechazado y registrado:** PENDIENTE
+- **Enlace Wokwi:** https://wokwi.com/projects/479819491217347585 
+- **Enlace Cirkit (sección de nodo):** https://app.cirkitdesigner.com/project/75988b2c-c401-4ed8-ae5e-e7d56159e44f
+- **Publicación MQTT:** 
+![EvidenciaCirkuit](img/evidencia6.png);
+- **Actuación comprobada:**
+![EvidenciaCirkuit](img/evidencia3.png);
+- **Ataque rechazado y registrado:** 
+![EvidenciaCirkuit](img/evidencia7.png);
 
 No agregar firmware simulado o capturas ficticias para llenar estos campos.
