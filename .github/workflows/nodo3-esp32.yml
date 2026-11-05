@@ -1,0 +1,30 @@
+name: Validar Nodo 3 ESP32
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [nodo3-gonzalo]
+jobs:
+  esp32-nodo3:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Instalar soporte ESP32
+        run: |
+          arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core install esp32:esp32 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+      - name: Instalar librerias
+        run: |
+          arduino-cli lib install "PubSubClient"
+          arduino-cli lib install "ArduinoJson"
+      - name: Preparar sketch sin secretos
+        run: |
+          mkdir -p "$RUNNER_TEMP/nodo3"
+          cp wokwi/nodo3-perimetro/sketch.ino "$RUNNER_TEMP/nodo3/nodo3.ino"
+          cp wokwi/nodo3-perimetro/secrets.example.h "$RUNNER_TEMP/nodo3/secrets.h"
+          python3 -m json.tool wokwi/nodo3-perimetro/diagram.json >/dev/null
+      - name: Compilar firmware
+        run: |
+          arduino-cli compile --fqbn esp32:esp32:esp32 "$RUNNER_TEMP/nodo3" --warnings all
