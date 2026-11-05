@@ -18,6 +18,6 @@ El Gateway transmite fields 1 y 8 siempre que exista WiFi, reloj válido, CA y A
 
 HTTPS se envía desde una tarea FreeRTOS separada. Mensajes importantes del monitor: "[ThingSpeak] Preparado: N campos", "GUARDADO HTTP 200 entry_id=X", "NO GUARDADO" o "FALLO HTTPS". HTTP 200 con respuesta "0" NO confirma escritura.
 
-**Problema abierto:** el ESP32 Gateway se desconecta de MQTT aun con WiFi conectado (state=-3). La capa HTTPS guardó datos, pero los sensores no llegan en forma continua. Ver [guía de diagnóstico](../docs/diagnostico-mqtt-2026-11-05.md).
+**Incidencia histórica:** durante las pruebas anteriores, el Gateway sufrió desconexiones MQTT `state=-3` con WiFi conectado. El equipo informa que los cinco Wokwi ya funcionan; **falta subir capturas/logs de la prueba integrada y los campos 2–7** para dejar esa mejora validada documentalmente. Ver [diagnóstico anterior](../docs/diagnostico-mqtt-2026-11-05.md).
 
 **Privacidad:** el canal es privado; el dashboard estático no puede incrustar sus gráficas sin una vía de lectura autorizada. Nunca publicar Write API Key, Read API Key privada ni HMAC en GitHub Pages.
