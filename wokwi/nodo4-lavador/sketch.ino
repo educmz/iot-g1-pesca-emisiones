@@ -140,8 +140,31 @@ void publicarEvento(const char* tipo, const char* motivo, uint64_t contador = 0)
   doc["seq"] = contador;
   String canonico = String("D4|") + ts + "|" + tipo + "|evento|VALIDO|" +
                     tipo + "|" + motivo + "|" + String((unsigned long long)contador);
-  doc["firma"] = firmaHmac(canonico, CLAVE_NODO4);
+  String firma=firmaHmac(canonico, CLAVE_NODO4);
+  if(firma.length()!=64)return; // Nunca publicar como firmado si faltan claves.
+  doc["firma"] = firma;
   publicarJson(TOPIC_ALERTA, doc);
+
+  // Tablero grupal: una copia de eventos de rechazo. El navegador la muestra
+  // pero el Gateway tiene que verificar HMAC antes de confiar en el evento.
+  bool rechazo = strcmp(tipo,"HMAC_INVALIDA")==0 ||
+                 strcmp(tipo,"REPLAY_BLOQUEADO")==0 ||
+                 strcmp(tipo,"APAGADO_BLOQUEADO")==0 ||
+                 strcmp(tipo,"ORDEN_RECHAZADA")==0 ||
+                 strcmp(tipo,"INTENSIDAD_BLOQUEADA")==0 ||
+                 strcmp(tipo,"COMANDO_BLOQUEADO")==0;
+  if(rechazo){
+    StaticJsonDocument<560> seg;
+    seg["hora"] = String("t+")+String(millis()/1000)+"s";
+    seg["nodo"]="nodo4";
+    seg["ataque"]=tipo;
+    seg["accion"]="RECHAZADO";
+    seg["motivo"]=motivo;
+    seg["ts"]=ts;
+    seg["seq_rechazado"]=contador;
+    seg["firma"]=firma;  // misma firma de /alerta; no equivale a validacion en navegador
+    publicarJson(TOPIC_SEG,seg);
+  }
 }
 
 void publicarPaquete() {
