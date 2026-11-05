@@ -4,4 +4,4 @@
 PubSubClient
 OneWire
 DallasTemperature
-ArduinoJson
+ArduinoJson@6.21.5
