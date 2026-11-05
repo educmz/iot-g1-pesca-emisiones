@@ -23,7 +23,7 @@ constexpr int PIN_GAS=34, PIN_TEMP=15, PIN_BUZZER=16, PIN_RELE=17;
 constexpr int ADC_ALARMA=3820, ADC_SALTO_MAX=500;
 constexpr float TEMP_ALARMA_C=45.0f;
 constexpr uint32_t LECTURA_MS=2000, HEARTBEAT_MS=30000;
-constexpr uint32_t WIFI_RETRY_MS=10000, MQTT_RETRY_MS=5000;
+constexpr uint32_t WIFI_RETRY_MS=45000, MQTT_RETRY_MS=5000;
 
 const char* TOPIC_DATOS="upc/g1/nodo1/datos";
 const char* TOPIC_ALERTA="upc/g1/nodo1/alerta";
@@ -46,6 +46,7 @@ uint32_t seqDatos=0;
 uint64_t ultimoSeqCmd=0;
 uint32_t ultimaLectura=0, ultimoWiFi=0, ultimoMQTT=0;
 uint32_t ultimoHeartbeat=0, ultimoEvento=0;
+bool wifiAntesConectado=false;
 
 String hexDigest(const uint8_t* b, size_t n) {
   const char* hexd="0123456789abcdef";
@@ -232,12 +233,27 @@ void recibirMQTT(char* topic,byte* payload,unsigned int len) {
 
 void mantenerMQTT() {
   uint32_t ahora=millis();
-  if(WiFi.status()!=WL_CONNECTED) {
-    if(!ultimoWiFi || ahora-ultimoWiFi>=WIFI_RETRY_MS) {
-      ultimoWiFi=ahora; WiFi.begin(WIFI_SSID,WIFI_PASSWORD,6);
-      Serial.println("[WiFi] Reintento; seguridad Edge sigue activa");
+  wl_status_t estadoWiFi=WiFi.status();
+  if(estadoWiFi!=WL_CONNECTED) {
+    wifiAntesConectado=false;
+    // WiFi.begin() ya se llama en setup(); repetirlo cada 10 s puede
+    // interrumpir el intento en curso en el simulador Wokwi.
+    if((uint32_t)(ahora-ultimoWiFi)>=WIFI_RETRY_MS) {
+      ultimoWiFi=ahora;
+      Serial.printf("[WiFi] Estado=%d; Edge continua activo. ",int(estadoWiFi));
+      if(estadoWiFi==WL_DISCONNECTED || estadoWiFi==WL_CONNECTION_LOST ||
+         estadoWiFi==WL_CONNECT_FAILED || estadoWiFi==WL_NO_SSID_AVAIL) {
+        Serial.printf("reconnect=%d\n",int(WiFi.reconnect()));
+      } else {
+        Serial.println("esperando sin reiniciar WiFi");
+      }
     }
     return;
+  }
+  if(!wifiAntesConectado) {
+    wifiAntesConectado=true;
+    Serial.print("[WiFi] Conectado, IP=");
+    Serial.println(WiFi.localIP());
   }
   if(!mqtt.connected() && (!ultimoMQTT || ahora-ultimoMQTT>=MQTT_RETRY_MS)) {
     ultimoMQTT=ahora;
@@ -277,8 +293,10 @@ void setup() {
   mqtt.setSocketTimeout(1);
   mqtt.setKeepAlive(30);
   WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);
   WiFi.begin(WIFI_SSID,WIFI_PASSWORD,6);
   ultimoWiFi=millis();
+  Serial.println("[WiFi] Buscando Wokwi-GUEST (canal 6)");
   configTime(0,0,"pool.ntp.org","time.google.com");
   Serial.println("NODO1: MQ2 ADC1 + BUZZER + EDGE + HMAC");
 }

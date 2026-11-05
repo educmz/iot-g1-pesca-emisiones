@@ -1,0 +1,30 @@
+name: Verificar Nodo 1 ESP32 WiFi
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [fix/nodo1-wifi-reconnect-estable]
+jobs:
+  nodo1:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Instalar ESP32
+        run: |
+          arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core install esp32:esp32 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+      - name: Instalar librerias
+        run: |
+          arduino-cli lib install "PubSubClient"
+          arduino-cli lib install "OneWire"
+          arduino-cli lib install "DallasTemperature"
+          arduino-cli lib install "ArduinoJson@6.21.5"
+      - name: Preparar sketch sin credenciales reales
+        run: |
+          mkdir -p "$RUNNER_TEMP/nodo1"
+          cp wokwi/nodo1-pozas/wifi-scan/wifi-scan.ino "$RUNNER_TEMP/nodo1/nodo1.ino"
+          cp wokwi/nodo1-pozas/wifi-scan/secrets.example.h "$RUNNER_TEMP/nodo1/secrets.h"
+      - name: Compilar firmware ESP32
+        run: arduino-cli compile --fqbn esp32:esp32:esp32 "$RUNNER_TEMP/nodo1" --warnings all
