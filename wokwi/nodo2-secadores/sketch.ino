@@ -54,6 +54,7 @@ String toHex(const uint8_t *bytes, size_t len) {
 
 String hmacSha256(const String& message) {
   unsigned char output[32];
+  if (strlen(HMAC_KEY)<24 || strncmp(HMAC_KEY,"CAMBIAR_POR_",11)==0) return "";
   const mbedtls_md_info_t *md = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
   if (!md || mbedtls_md_hmac(md, reinterpret_cast<const unsigned char*>(HMAC_KEY),
            strlen(HMAC_KEY), reinterpret_cast<const unsigned char*>(message.c_str()),
