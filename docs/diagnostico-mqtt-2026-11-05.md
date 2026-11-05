@@ -2,14 +2,14 @@
 
 **Estado:** desconexiones MQTT sin resolver; la conexión HTTPS a ThingSpeak sí logró guardar registros. No confundir una conexión exitosa inicial con estabilidad.
 
-## Enlaces y responsables
+## Enlaces y responsables (versiones comunicadas por el equipo el 05/11/2026; confirmar código ejecutado)
 
 | Nodo | Responsable | Wokwi | Configuración |
 |---|---|---|---|
-| 1 — Pozas | Fernando | https://wokwi.com/projects/479819491217347585 | secrets.h: MQTT_HOST |
-| 2 — Secadores | Fabricio | https://wokwi.com/projects/479809534640024577 | config.h: MQTT_BROKER, MQTT_ROOT |
-| 3 — Perímetro | Gonzalo | https://wokwi.com/projects/479699850241480705 | secrets.h: MQTT_HOST |
-| 4 — Lavador | Pedro | https://wokwi.com/projects/479710105894416385 | secrets.h: MQTT_HOST |
+| 1 — Pozas | Fernando | https://wokwi.com/projects/479864540006804481 | secrets.h: MQTT_HOST |
+| 2 — Secadores | Fabricio | https://wokwi.com/projects/479864093839705089 | config.h: MQTT_BROKER, MQTT_ROOT |
+| 3 — Perímetro | Gonzalo | https://wokwi.com/projects/479866498817689601 | secrets.h: MQTT_HOST |
+| 4 — Lavador | Pedro | https://wokwi.com/projects/479867720782481409 | secrets.h: MQTT_HOST |
 | 5 — Gateway | Eduardo | https://wokwi.com/projects/479700208383720449 | sketch.ino: MQTT_HOST; secrets.h: HMAC y ThingSpeak |
 
 Los nodos pueden ejecutarse en laptops y redes diferentes. Wokwi NO se sincroniza con GitHub automáticamente: verificar la copia realmente guardada y ejecutada en cada enlace.
