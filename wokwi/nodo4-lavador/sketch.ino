@@ -517,7 +517,7 @@ void conectarRed() {
   ultimoIntentoMqtt = ahora;
 
   if (mqtt.connect(idCliente.c_str(), TOPIC_ESTADO, 1, true, "{\"id\":\"nodo4\",\"estado\":\"offline\"}")) {
-    Serial.println("[MQTT] CONECTADO broker.hivemq.com:1883");
+    Serial.printf("[MQTT] CONECTADO %s:%u\n", MQTT_HOST, MQTT_PORT);
     if (mqtt.subscribe(TOPIC_CMD, 1)) {
       Serial.printf("[MQTT] SUBSCRITO=%s\n", TOPIC_CMD);
     } else {

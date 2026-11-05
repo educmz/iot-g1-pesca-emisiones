@@ -55,3 +55,22 @@ Fuente sobre la pasarela, no evidencia de una causa específica: https://docs.wo
 | Acciones físicas, TFT con cuatro nodos, ocho campos ThingSpeak | No verificadas |
 
 No debe fusionarse esta rama como integración concluida. Se necesita acceso de edición con el propietario de los originales y la configuración privada operativa de ThingSpeak, además de resolver y probar migración/pérdida de NVS y repetir las pruebas graduales. No compartir claves por tickets, PR o documentación pública.
+
+## Ampliación de pruebas (misma sesión, originales sin guardar cambios)
+
+- Tras reiniciar una vez D1 después del fallo de pasarela, conectó y D5 aceptó gas y temperatura. D5 también registró los **cinco sensores de D2** en sus líneas HMAC: gas_relativo, gas_raw, temperatura, humedad y estado_secadores. `/paquete` publicó con resultado OK.
+- D3 conectó; D5 registró `nodo3 / riesgo seq=9`. D3 rechazó heartbeats con `HB sin reloj valido o vencido`. No se aprobó su salida de modo seguro.
+- D4 conectó; D5 registró `nodo4 / riesgo_alto seq=60`. D4 arrancó preventivamente, emitió FALLA_LAVADOR y detectó correctamente el interruptor: `CONFIRMACION_OK / INTERRUPTOR_ACTIVO`. Se devolvió el interruptor a su posición inicial. D5 emitió VENT_MAX al detectar lavador sin confirmación; D1 rechazó la orden por reloj/vencimiento. No se confirmó ventilación de respaldo efectiva.
+- El mensaje D4 `CONECTADO broker.hivemq.com:1883` era un literal desactualizado: `setServer()` usa `MQTT_HOST=broker.emqx.io`, comprobado sin revelar credenciales. Se corrigió el diagnóstico para imprimir la configuración real.
+- D2 aceptó la inyección Serial `v`: gas 14.99 %, estado NORMAL y calidad PRUEBA_INYECTADA. Se restauró con `m`, confirmado por Serial. Esto prueba el firmware original, no la nueva reserva NVS.
+- Último corte de observación: D5 **5:23.319 de simulación**, **3 desconexiones registradas**, **4 conexiones/suscripciones exitosas** y **al menos 480 mensajes HMAC aceptados**. No hay marcas temporales suficientes para calcular duración exacta de cada corte o latencia de reconexión. No se infieren contadores por sensor a partir del log muestreado cada 20 mensajes.
+- Al mismo corte: D1 4:02.821, D2 4:45.224, D3 1:42.649, D4 0:32.883. No equivale a cinco minutos simulados simultáneos de todos los nodos. La ejecución conjunta se intentó durante más de cinco minutos reales; F queda **no aprobada**.
+- Medición de ralentización: D5 avanzó de 2:47.649 a 3:55.126 durante 162.729 segundos reales (67.477 segundos simulados, aproximadamente 41.5 %). D3/D4 mostraron velocidades alrededor de 9 %. Los tiempos simulados y reales no deben confundirse. El broker usa tiempo real; los relojes de los ESP32 progresan a velocidades diferentes entre sincronizaciones NTP. Esto es una hipótesis respaldada para los problemas de keepalive/frescura, no una atribución definitiva de los cierres TCP. No se ampliaron ventanas de comandos ni se desactivó validación temporal.
+- TFT encendida, con indicadores Fog/MQTT/HMAC/respaldo visibles. No se certifica en esta prueba que todos los valores permanezcan frescos simultáneamente.
+- Prueba G sigue bloqueada por configuración privada de ThingSpeak ausente en el original. **Cero registros ThingSpeak verificados en esta sesión.**
+
+## GitHub y compilación
+
+PR: https://github.com/educmz/iot-g1-pesca-emisiones/pull/20 (borrador, sin merge).
+
+Para el commit `86e78eb2a387eae99eee844104d48566bcc1a3f6`, los seis workflows finalizaron con éxito: estructura, backend D2, integración (compila D1/D2 y prueba reserva), firmware D3, firmware/puente D4, firmware/Fog D5. Por tanto, **los cinco firmwares candidatos compilaron en GitHub Actions**. Eso no sustituye las pruebas dinámicas de la nueva versión ni el guardado en Wokwi. La corrección posterior del texto de diagnóstico D4 y esta ampliación documental requieren verificar el nuevo head del PR.
