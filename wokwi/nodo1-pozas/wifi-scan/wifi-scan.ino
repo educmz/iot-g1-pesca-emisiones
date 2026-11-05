@@ -18,6 +18,7 @@
 #include <time.h>
 #include <math.h>
 #include "secrets.h"
+#include "telemetry_sequence.h"
 
 constexpr int PIN_GAS=34, PIN_TEMP=15, PIN_BUZZER=16, PIN_RELE=17;
 constexpr int ADC_ALARMA=3820, ADC_SALTO_MAX=500;
@@ -42,7 +43,7 @@ bool buzzerActivo=false, releActivo=false, primeraMedicion=true;
 int gasAnterior=-1, gasADC=0;
 float temperaturaC=-127.0f;
 String calidadGas="sin_lectura", calidadTemp="sin_lectura";
-uint32_t seqDatos=0;
+TelemetrySequence txSequence;
 uint64_t ultimoSeqCmd=0;
 uint32_t ultimaLectura=0, ultimoWiFi=0, ultimoMQTT=0;
 uint32_t ultimoHeartbeat=0, ultimoEvento=0;
@@ -77,16 +78,18 @@ String u64str(uint64_t x) {
 
 // Canonizacion de telemetria acordable con D3:
 // id|ts_millis|seq|sensor|valor_con_2_decimales|unidad|calidad
-String materialDato(uint32_t ts, uint32_t seq, const char* sensor,
+String materialDato(uint32_t ts, uint64_t seq, const char* sensor,
                     float valor, const char* unidad, const char* calidad) {
-  return String("nodo1|")+ts+"|"+seq+"|"+sensor+"|"+
+  return String("nodo1|")+ts+"|"+u64str(seq)+"|"+sensor+"|"+
          String(valor,2)+"|"+unidad+"|"+calidad;
 }
 
 void publicarDato(const char* topic,const char* sensor,float valor,
                   const char* unidad,const char* calidad,const char* tipo=nullptr) {
   if (!mqtt.connected()) return;
-  uint32_t ts=millis(), seq=++seqDatos;
+  uint32_t ts=millis();
+  uint64_t seq=nvsOK?txSequence.next(prefs):0;
+  if(!seq) {Serial.println("[SEQ] NVS TX no disponible");return;}
   String firma=hmacSha256(materialDato(ts,seq,sensor,valor,unidad,calidad),HMAC_KEY_NODO1);
   if (firma.length()!=64) {
     Serial.println("[HMAC] FALTA CLAVE NODO1: telemetria no publicada"); return;
@@ -164,6 +167,7 @@ void leerYDecidir() {
 
   publicarDato(TOPIC_DATOS,"gas_raw",(float)gasADC,"adc",calidadGas.c_str());
   publicarDato(TOPIC_DATOS,"temperatura",temperaturaC,"C",calidadTemp.c_str());
+  publicarDato(TOPIC_DATOS,"ventilacion",releActivo?1.0f:0.0f,"estado","ok");
   if(primeraMedicion || alertaLocal) {
     publicarDato(TOPIC_ALERTA,"riesgo_pozas",alertaLocal?1.0f:0.0f,
           "nivel",(validoGas && validoTemp)?"ok":"sospechosa",
@@ -266,6 +270,7 @@ void setup() {
 
   nvsOK=prefs.begin("g1-nodo1",false);
   if(nvsOK) {
+    txSequence.begin(prefs);
     ultimoSeqCmd=prefs.getULong64("lastSeq",0);
     ventilacionForzada=prefs.getBool("ventMax",false);
   }

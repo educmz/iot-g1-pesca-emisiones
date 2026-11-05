@@ -31,3 +31,12 @@ test('humedad imposible rechazada',()=>{
 test('redondeo decimal canónico',()=>{
   const m={...message(),valor:42.3};assert.equal(canonicalGroup(m),'nodo2|42000|100|gas_relativo|42.30|%|OK');
 });
+test('contador persistente mayor a uint32 conserva firma y bloquea replay',()=>{
+  const v=createGroupVerifier(KEY);
+  const a={...message(),seq:4294967297};a.firma=signGroup(a,KEY);
+  assert.equal(v(JSON.parse(JSON.stringify(a))).ok,true);
+  assert.equal(v(a).reason,'REPETICION_DE_SECUENCIA');
+  const b={...message(),seq:4294971393};b.firma=signGroup(b,KEY);
+  assert.equal(v(b).ok,true);
+  assert.equal(v(a).reason,'REPETICION_DE_SECUENCIA');
+});

@@ -46,6 +46,7 @@
 #include <math.h>
 #include "secrets.h"
 #include "fog_logic.h"
+#include "sample_history.h"
 
 constexpr uint8_t TFT_CS=5, TFT_DC=27, TFT_RST=26;
 constexpr uint8_t BTN_PIN=25, LED_PIN=32, I2C_SDA=21, I2C_SCL=22;
@@ -54,7 +55,11 @@ constexpr uint32_t HEARTBEAT_MS=20000, D5_STATUS_MS=30000;
 constexpr uint32_t FOG_MS=1000, SCREEN_MS=1000, SAMPLE_MAX_AGE_MS=12000;
 constexpr uint32_t CONFIRM_WAIT_MS=10000, THINGSPEAK_MS=25000;
 // Poner false SOLO si se necesita una prueba aislando MQTT de HTTPS.
-constexpr bool ENABLE_THINGSPEAK=true;
+#ifndef G1_ENABLE_THINGSPEAK
+#define G1_ENABLE_THINGSPEAK 1
+#endif
+constexpr bool ENABLE_THINGSPEAK=G1_ENABLE_THINGSPEAK;
+const char* FIRMWARE_REV="mqtt-investigation-v2";
 constexpr uint32_t BUTTON_DEBOUNCE_MS=60, RELEASE_HOLD_MS=2500;
 constexpr int SENSOR_HISTORY=3;
 
@@ -78,24 +83,13 @@ RTC_DS1307 rtc;
 struct ThingSpeakRequest { char body[320]; };
 QueueHandle_t thingspeakQueue=nullptr;
 bool thingspeakWorkerReady=false;
+TaskHandle_t thingspeakTask=nullptr;
+uint32_t mqttSessions=0,sessionStart=0,lastLoopAt=0,maxLoopGap=0,maxLoopTime=0,lastDiag=0;
+unsigned long received=0,acceptedByNode[4]={},rejectedByNode[4]={};
 
-struct History {
-  float samples[SENSOR_HISTORY]={0,0,0};
-  uint8_t count=0, cursor=0;
-  uint32_t at=0;
-  void add(float v) {
-    samples[cursor]=v;
-    cursor=(cursor+1)%SENSOR_HISTORY;
-    if(count<SENSOR_HISTORY)count++;
-    at=millis();
-  }
-  bool fresh() const { return count>0 && (uint32_t)(millis()-at)<=SAMPLE_MAX_AGE_MS; }
-  void invalidate() { count=0; at=0; }
-  float avg() const {
-    if(!count)return 0;
-    float sum=0;for(int i=0;i<count;i++)sum+=samples[i];
-    return sum/count;
-  }
+struct History : SampleHistory<SENSOR_HISTORY> {
+  void add(float v) {SampleHistory::add(v,millis(),SAMPLE_MAX_AGE_MS);}
+  bool fresh() const {return SampleHistory::fresh(millis(),SAMPLE_MAX_AGE_MS);}
 };
 History n1Gas,n1Temp,n1Vent,n2Gas,n2Temp,n3Gas,n3Wind,n3Risk,n4Lavador,n4Confirm,n4Intensity;
 uint64_t lastSeqByNode[4]={0,0,0,0};
@@ -338,19 +332,23 @@ void acceptSecurityEvent(byte* bytes,unsigned int length) {
   } else totalUntrustedEvents++;
 }
 void onMQTT(char* topic,byte* payload,unsigned int length) {
-  static uint32_t recibidos=0;
-  recibidos++;
+  unsigned long recibidos=++received;
   if(recibidos<=10 || recibidos%20==0) {
     Serial.printf("[MQTT RX] Topico=%s bytes=%u total=%lu\n",
                   topic,length,(unsigned long)recibidos);
   }
   if(strcmp(topic,T_D4_ALERT)==0) {acceptD4Alert(payload,length);return;}
   if(strcmp(topic,T_SECURITY)==0) {acceptSecurityEvent(payload,length);return;}
-  if(nodeForTopic(topic)>=0)acceptData(topic,payload,length);
+  int n=nodeForTopic(topic);
+  if(n>=0) {
+    unsigned long before=totalVerified;
+    acceptData(topic,payload,length);
+    if(totalVerified>before)acceptedByNode[n]++;else rejectedByNode[n]++;
+  }
 }
 FogInputs fogInputs() {
   return {n1Gas.fresh(),n2Gas.fresh(),n3Gas.fresh(),n3Wind.fresh(),n3Risk.fresh(),
-          n1Gas.avg(),n2Gas.avg(),n3Gas.avg(),n3Wind.avg(),(int)roundf(n3Risk.avg()),
+          n1Gas.avg(),n2Gas.avg(),n3Gas.avg(),n3Wind.avg(),(int)roundf(n3Risk.latest()),
           n1Temp.fresh(),n2Temp.fresh(),n1Temp.avg(),n2Temp.avg()};
 }
 bool publishJson(const char* topic,JsonDocument& j,bool retain=false) {
@@ -445,8 +443,8 @@ void processFog(uint32_t now) {
 void checkConfirmation(uint32_t now) {
   // D4 can auto-start its lavador BEFORE the Gateway sends an ON command.
   // Track a physically unconfirmed ON using authenticated sensor readings.
-  bool on=n4Lavador.fresh() && n4Lavador.avg()>=0.5f;
-  bool confirmed=n4Confirm.fresh() && n4Confirm.avg()>=0.5f;
+  bool on=n4Lavador.fresh() && n4Lavador.latest()>=0.5f;
+  bool confirmed=n4Confirm.fresh() && n4Confirm.latest()>=0.5f;
   if(on && n4Confirm.fresh() && !confirmed) {
     if(!d4UnconfirmedSince)d4UnconfirmedSince=now;
     if(!backupLatched && now-d4UnconfirmedSince>=CONFIRM_WAIT_MS)
@@ -470,7 +468,7 @@ void handleButton(uint32_t now) {
      now-buttonPressedAt>=RELEASE_HOLD_MS) {
     holdHandled=true;
     if(backupLatched && current.safeToStop &&
-       n4Confirm.fresh() && n4Confirm.avg()>=0.5f &&
+       n4Confirm.fresh() && n4Confirm.latest()>=0.5f &&
        sendSigned(1,"VENT_AUTO","0")) {
       backupLatched=false;
       if(prefsOK)prefs.putBool("backup",false);
@@ -510,12 +508,12 @@ void drawScreen() {
   tft.setCursor(8,133);tft.print("Viento: ");
   if(n3Wind.fresh()){tft.print(n3Wind.avg(),0);tft.print(" grados");}else tft.print("--");
   tft.setCursor(8,150);tft.print("D4 lavador / confirmacion: ");
-  tft.print(n4Lavador.fresh()?(n4Lavador.avg()>0.5?"ON":"OFF"):"--");
+  tft.print(n4Lavador.fresh()?(n4Lavador.latest()>0.5?"ON":"OFF"):"--");
   tft.print("/");
-  tft.print(n4Confirm.fresh()?(n4Confirm.avg()>0.5?"SI":"NO"):"--");
+  tft.print(n4Confirm.fresh()?(n4Confirm.latest()>0.5?"SI":"NO"):"--");
   tft.setCursor(8,168);tft.setTextColor(backupLatched?ILI9341_RED:ILI9341_WHITE);
   if(backupLatched) {
-    tft.print(n1Vent.fresh()&&n1Vent.avg()>=0.5?"VENT_MAX N1 CONFIRMADO":"VENT_MAX N1 PENDIENTE");
+    tft.print(n1Vent.fresh()&&n1Vent.latest()>=0.5?"VENT_MAX N1 CONFIRMADO":"VENT_MAX N1 PENDIENTE");
   } else tft.print("Respaldo: no activo");
   tft.setTextColor(ILI9341_WHITE);
   tft.setCursor(8,187);
@@ -562,6 +560,9 @@ void handleNetwork(uint32_t now) {
   }
   if(mqttWasConnected) {
     mqttWasConnected=false;
+    Serial.printf("[MQTT SESSION] duracion_ms=%lu sesiones=%lu max_gap_ms=%lu max_loop_ms=%lu\n",
+      (unsigned long)(millis()-sessionStart),(unsigned long)mqttSessions,
+      (unsigned long)maxLoopGap,(unsigned long)maxLoopTime);
     Serial.printf("[MQTT] Conexion perdida: state=%d WiFi=%d uptime=%lu s; reintentando\n",
                   mqtt.state(),int(WiFi.status()),(unsigned long)(millis()/1000));
   }
@@ -575,6 +576,8 @@ void handleNetwork(uint32_t now) {
     bool subD4=mqtt.subscribe(T_D4_ALERT);
     bool subSeg=mqtt.subscribe(T_SECURITY);
     mqttWasConnected=true;
+    sessionStart=millis();mqttSessions++;lastLoopAt=0;
+    Serial.printf("[MQTT SESSION] inicio_ms=%lu cliente=%s\n",(unsigned long)sessionStart,cid.c_str());
     desiredAction=-1;lastHB=0;lastStatus=0;
     Serial.printf("[MQTT] Conectado y suscrito: datos=%d D4=%d seg=%d\n",
                   int(subDatos),int(subD4),int(subSeg));
@@ -615,8 +618,7 @@ void thingspeakWorker(void* parameter) {
       if(status==200 && entrada>0) {
         Serial.printf("[ThingSpeak] GUARDADO HTTP 200 entry_id=%ld\n",entrada);
       } else {
-        Serial.printf("[ThingSpeak] NO GUARDADO HTTP %d respuesta=%s\n",
-                      status,respuesta.substring(0,64).c_str());
+        Serial.printf("[ThingSpeak] NO GUARDADO HTTP %d entry_id=%ld\n",status,entrada);
       }
     } else {
       Serial.printf("[ThingSpeak] FALLO HTTPS codigo=%d detalle=%s\n",
@@ -661,8 +663,8 @@ void sendThingSpeak(uint32_t now) {
   if(n2Gas.fresh()) {body+="&field3="+String(n2Gas.avg(),1);fields++;}
   if(n3Gas.fresh()) {body+="&field4="+String(n3Gas.avg(),0);fields++;}
   if(n3Wind.fresh()) {body+="&field5="+String(n3Wind.avg(),0);fields++;}
-  if(n4Lavador.fresh()) {body+="&field6="+String(n4Lavador.avg(),0);fields++;}
-  if(n4Confirm.fresh()) {body+="&field7="+String(n4Confirm.avg(),0);fields++;}
+  if(n4Lavador.fresh()) {body+="&field6="+String(n4Lavador.latest(),0);fields++;}
+  if(n4Confirm.fresh()) {body+="&field7="+String(n4Confirm.latest(),0);fields++;}
   ThingSpeakRequest req={};
   if(body.length()>=sizeof(req.body)) {
     Serial.println("[ThingSpeak] ERROR: datos demasiado largos");return;
@@ -678,6 +680,7 @@ void sendThingSpeak(uint32_t now) {
 }
 void setup() {
   Serial.begin(115200);
+  Serial.printf("[FW] %s HTTPS=%d keepalive=20 socket_timeout=8\n",FIRMWARE_REV,int(ENABLE_THINGSPEAK));
   pinMode(BTN_PIN,INPUT_PULLUP);
   Wire.begin(I2C_SDA,I2C_SCL);
   SPI.begin(18,19,23,TFT_CS);
@@ -697,7 +700,7 @@ void setup() {
     Serial.println("[CLAVES] Faltan claves privadas D5 para emitir comandos");
   mqtt.setServer(MQTT_HOST,MQTT_PORT);
   mqtt.setCallback(onMQTT);
-  mqtt.setBufferSize(1024);
+  if(!mqtt.setBufferSize(1024))Serial.println("[MQTT] ERROR buffer allocation");
   // Pings mas frecuentes; mayor tolerancia a lecturas TCP lentas en Wokwi.
   mqtt.setKeepAlive(20);
   mqtt.setSocketTimeout(8);
@@ -711,7 +714,7 @@ void setup() {
     thingspeakQueue=xQueueCreate(1,sizeof(ThingSpeakRequest));
     if(thingspeakQueue) {
       BaseType_t started=xTaskCreatePinnedToCore(
-        thingspeakWorker,"ThingSpeakHTTPS",12288,nullptr,1,nullptr,0);
+        thingspeakWorker,"ThingSpeakHTTPS",12288,nullptr,1,&thingspeakTask,0);
       thingspeakWorkerReady=(started==pdPASS);
     }
     Serial.printf("[ThingSpeak] Tarea HTTPS independiente: %s\n",
@@ -724,7 +727,12 @@ void loop() {
   uint32_t now=millis();
   handleNetwork(now);
   if(mqtt.connected()) {
+    uint32_t loopAt=millis();
+    if(lastLoopAt && loopAt-lastLoopAt>maxLoopGap)maxLoopGap=loopAt-lastLoopAt;
+    lastLoopAt=loopAt;
     bool mqttLoopOK=mqtt.loop();
+    uint32_t elapsed=millis()-loopAt;
+    if(elapsed>maxLoopTime)maxLoopTime=elapsed;
     if(!mqttLoopOK) {
       Serial.printf("[MQTT] loop fallo state=%d WiFi=%d\n",
                     mqtt.state(),int(WiFi.status()));
@@ -736,6 +744,7 @@ void loop() {
       lastStatus=now;publishStatus();
     }
   }
+  now=millis(); // refresh after any blocking TCP operation
   if(!lastFog || now-lastFog>=FOG_MS) {
     lastFog=now;processFog(now);
     checkConfirmation(now);
@@ -745,5 +754,17 @@ void loop() {
     lastScreen=now;drawScreen();
   }
   sendThingSpeak(now);
+  if(now-lastDiag>=10000) {
+    lastDiag=now;
+    unsigned mask=(n1Gas.fresh()?4:0)|(n2Gas.fresh()?8:0)|(n3Gas.fresh()?16:0)|
+      (n3Wind.fresh()?32:0)|(n4Lavador.fresh()?64:0)|(n4Confirm.fresh()?128:0);
+    Serial.printf("[DIAG] ms=%lu mqtt=%d state=%d sessions=%lu session_ms=%lu rx=%lu ok=%lu reject=%lu fresh_fields=0x%02x heap=%u min_heap=%u loop_stack=%u https_stack=%u max_gap_ms=%lu max_loop_ms=%lu\n",
+      (unsigned long)now,int(mqtt.connected()),mqtt.state(),(unsigned long)mqttSessions,
+      mqtt.connected()?(unsigned long)(now-sessionStart):0UL,received,totalVerified,totalRejected,mask,
+      ESP.getFreeHeap(),ESP.getMinFreeHeap(),unsigned(uxTaskGetStackHighWaterMark(nullptr)),
+      thingspeakWorkerReady?unsigned(uxTaskGetStackHighWaterMark(thingspeakTask)):0U,
+      (unsigned long)maxLoopGap,(unsigned long)maxLoopTime);
+    for(int i=0;i<4;i++)Serial.printf("[DIAG N%d] ok=%lu reject=%lu\n",i+1,acceptedByNode[i],rejectedByNode[i]);
+  }
   delay(10);
 }

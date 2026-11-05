@@ -24,6 +24,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/nodo3"
           cp wokwi/nodo3-perimetro/sketch.ino "$RUNNER_TEMP/nodo3/nodo3.ino"
           cp wokwi/nodo3-perimetro/secrets.example.h "$RUNNER_TEMP/nodo3/secrets.h"
+          cp wokwi/nodo3-perimetro/telemetry_sequence.h "$RUNNER_TEMP/nodo3/telemetry_sequence.h"
           python3 -m json.tool wokwi/nodo3-perimetro/diagram.json >/dev/null
       - name: Compilar firmware
         run: |

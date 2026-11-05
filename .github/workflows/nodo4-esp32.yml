@@ -33,5 +33,6 @@ jobs:
           mkdir -p "$RUNNER_TEMP/nodo4"
           cp wokwi/nodo4-lavador/sketch.ino "$RUNNER_TEMP/nodo4/nodo4.ino"
           cp wokwi/nodo4-lavador/secrets.example.h "$RUNNER_TEMP/nodo4/secrets.h"
+          cp wokwi/nodo4-lavador/telemetry_sequence.h "$RUNNER_TEMP/nodo4/telemetry_sequence.h"
       - name: Compilar ESP32
         run: arduino-cli compile --fqbn esp32:esp32:esp32 "$RUNNER_TEMP/nodo4" --warnings all

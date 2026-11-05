@@ -11,6 +11,8 @@
 #include <time.h>
 #include <ArduinoJson.h>
 #include "config.h"
+#include <Preferences.h>
+#include "telemetry_sequence.h"
 
 constexpr int PIN_DHT = 15, PIN_GAS = 34;
 constexpr int PIN_R = 25, PIN_G = 26, PIN_B = 27;
@@ -24,6 +26,10 @@ PubSubClient mqtt(tcp);
 DHTesp dht;
 String bootId;
 uint32_t seqNumber = 0;
+Preferences txPrefs;
+TelemetrySequence txSequence;
+bool txReady=false;
+String seqText(uint64_t n) {char b[24];snprintf(b,sizeof(b),"%llu",(unsigned long long)n);return String(b);}
 unsigned long lastRead = 0, lastHeartbeat = 0, lastWifiTry = 0, lastMqttTry = 0;
 String previousStatus = "";
 // Inyección controlada SOLO para pruebas académicas: nunca confundirla con el MQ-2 real.
@@ -150,8 +156,10 @@ void publishPackage(const String& topic, float t, float h, int raw,
 void publicarSensor(const char* topic,const char* sensor,float valor,
                     const char* unidad,const String& calidad) {
   if(!mqtt.connected())return;
-  uint32_t ts=millis(),seq=++seqNumber;
-  String canon=String("nodo2|")+ts+"|"+seq+"|"+sensor+"|"+
+  uint32_t ts=millis();
+  uint64_t seq=txReady?txSequence.next(txPrefs):0;
+  if(!seq) {Serial.println("[SEQ] NVS TX no disponible");return;}
+  String canon=String("nodo2|")+ts+"|"+seqText(seq)+"|"+sensor+"|"+
                String(valor,2)+"|"+unidad+"|"+calidad;
   String firma=hmacSha256(canon);
   if(firma.length()!=64)return;
@@ -180,6 +188,8 @@ void publicarDatosGrupo(float t,float h,int raw,float gas,
 
 void setup() {
   Serial.begin(115200);
+  txReady=txPrefs.begin("g1-n2-tx",false);
+  if(txReady)txReady=txSequence.begin(txPrefs);
   pinMode(PIN_R, OUTPUT); pinMode(PIN_G, OUTPUT); pinMode(PIN_B, OUTPUT);
   pinMode(PIN_GAS, INPUT);
   setRGB(true,false,false); // señal de arranque / hasta primera lectura válida

@@ -6,6 +6,7 @@
 #include <time.h>
 #include <mbedtls/md.h>
 #include "secrets.h"
+#include "telemetry_sequence.h"
 
 constexpr uint8_t PIN_RELE = 26;
 constexpr uint8_t PIN_CONFIRMACION = 32;
@@ -56,7 +57,7 @@ uint32_t ultimoPasoUs = 0;
 uint64_t ultimoContadorControl = 0;
 uint64_t ultimoContadorHeartbeat = 0;
 uint32_t secuenciaReporte = 0;
-uint32_t secuenciaGrupo = 0;
+TelemetrySequence txSequence;
 bool almacenamientoOK = false;
 String idCliente;
 
@@ -198,9 +199,10 @@ void publicarPaquete() {
 void publicarSensorGrupo(const char* sensor, float valor, const char* unidad) {
   if (!mqtt.connected()) return;
   const uint32_t ts=millis();
-  const uint32_t seq=++secuenciaGrupo;
+  const uint64_t seq=almacenamientoOK?txSequence.next(preferencias):0;
+  if(!seq) {Serial.println("[SEQ] NVS TX no disponible");return;}
   const char* calidad="ok";
-  String canonico=String("nodo4|")+ts+"|"+seq+"|"+sensor+"|"+
+  String canonico=String("nodo4|")+ts+"|"+String((unsigned long long)seq)+"|"+sensor+"|"+
                   String(valor,2)+"|"+unidad+"|"+calidad;
   String firma=firmaHmac(canonico,CLAVE_NODO4);
   if(firma.length()!=64)return;
@@ -484,7 +486,7 @@ void conectarRed() {
   ultimoIntentoMqtt = ahora;
 
   if (mqtt.connect(idCliente.c_str(), TOPIC_ESTADO, 1, true, "{\"id\":\"nodo4\",\"estado\":\"offline\"}")) {
-    Serial.println("[MQTT] CONECTADO broker.hivemq.com:1883");
+    Serial.printf("[MQTT] CONECTADO %s:%u cliente=%s\n",MQTT_HOST,MQTT_PORT,idCliente.c_str());
     if (mqtt.subscribe(TOPIC_CMD, 1)) {
       Serial.printf("[MQTT] SUBSCRITO=%s\n", TOPIC_CMD);
     } else {
@@ -540,6 +542,7 @@ void setup() {
   almacenamientoOK = preferencias.begin("g1d4-mqtt", false);
   if(!almacenamientoOK)Serial.println("[SEGURIDAD] NVS no disponible: comandos MQTT se rechazaran");
   if(almacenamientoOK){
+    txSequence.begin(preferencias);
     uint64_t contadorAnterior = preferencias.getULong64("ultimoSeq", 0);
     ultimoContadorControl = preferencias.getULong64("seqCtrl", contadorAnterior);
     ultimoContadorHeartbeat = preferencias.getULong64("seqHB", contadorAnterior);
@@ -549,7 +552,7 @@ void setup() {
   encenderLavador("ARRANQUE_PREVENTIVO_SIN_GATEWAY");
   ultimoReporte = millis();
   ultimoHeartbeat = millis();
-  idCliente = "g1-pesca-d4-" + String((uint32_t)(ESP.getEfuseMac() & 0xffffffff), HEX);
+  idCliente = "g1-pesca-d4-" + String((uint32_t)esp_random(), HEX);
   mqtt.setServer(MQTT_HOST, MQTT_PORT);
   mqtt.setCallback(recibirMqtt);
   mqtt.setKeepAlive(15);

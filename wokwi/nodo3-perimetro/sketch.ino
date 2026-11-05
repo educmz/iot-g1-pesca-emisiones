@@ -24,6 +24,7 @@
 #include <ArduinoJson.h>
 #include <time.h>
 #include <Preferences.h>
+#include "telemetry_sequence.h"
 #include "mbedtls/md.h"
 #include "secrets.h"     // WIFI_SSID, WIFI_PASSWORD, MQTT_HOST, MQTT_PORT, HMAC_KEY_NODO3 (NO se sube a GitHub)
 
@@ -81,10 +82,11 @@ unsigned long ultimoGateway = 0; // actualizado EXCLUSIVAMENTE tras HMAC válido
 Preferences prefsGateway;
 bool prefsGatewayOK = false;
 uint64_t ultimoSeqGateway = 0;
-struct EcoSaliente { unsigned long seq; String firma; bool pendiente; };
+struct EcoSaliente { uint64_t seq; String firma; bool pendiente; };
 EcoSaliente ecos[16];
 uint8_t cursorEco = 0;
-unsigned long seq = 0;                 // contador de mensajes propios
+TelemetrySequence txSequence;
+uint64_t seq = 0;                 // contador de mensajes propios
 String pozasTxt = "sin dato", secadTxt = "sin dato";
 String mensajeViejo = "";              // guardado para simular el ataque de repetición
 unsigned long tLectura = 0, tPublicar = 0, tLatido = 0, tReconexion = 0, tUltimoEvento = 0, tUltimoDesmentido = 0;
@@ -133,10 +135,10 @@ String secuenciaLarga(uint64_t seq64) {
 
 // Texto canónico que se firma (propuesta para el contrato del grupo).
 // id|ts|seq|sensor|valor(2 decimales)|unidad|calidad   -> HMAC-SHA256 en hex (64 caracteres)
-String textoCanonico(const char* id, unsigned long ts, unsigned long s, const char* sensor,
+String textoCanonico(const char* id, unsigned long ts, uint64_t s, const char* sensor,
                      float valor, const char* unidad, const char* cal) {
   char buf[160];
-  snprintf(buf, sizeof(buf), "%s|%lu|%lu|%s|%.2f|%s|%s", id, ts, s, sensor, valor, unidad, cal);
+  snprintf(buf, sizeof(buf), "%s|%lu|%llu|%s|%.2f|%s|%s", id, ts, (unsigned long long)s, sensor, valor, unidad, cal);
   return String(buf);
 }
 
@@ -194,13 +196,13 @@ void actualizarLed() {
 
 // La única telemetría que aceptamos sin alarma es el eco exacto de UN
 // mensaje que acabamos de publicar. Un segundo eco idéntico es replay.
-void guardarEco(unsigned long secuencia,const String& firma) {
+void guardarEco(uint64_t secuencia,const String& firma) {
   ecos[cursorEco].seq=secuencia;
   ecos[cursorEco].firma=firma;
   ecos[cursorEco].pendiente=true;
   cursorEco=(cursorEco+1)%16;
 }
-bool consumirEco(unsigned long secuencia,const String& firma) {
+bool consumirEco(uint64_t secuencia,const String& firma) {
   for (int i=0;i<16;i++) {
     if (ecos[i].pendiente && ecos[i].seq==secuencia &&
         igualConstante(ecos[i].firma,firma)) {
@@ -214,7 +216,8 @@ bool consumirEco(unsigned long secuencia,const String& firma) {
 // ================= Publicar =================
 void publicarLectura(const char* sensor, float valor, const char* unidad, const char* cal) {
   if (!mqtt.connected()) return;
-  seq++;
+  seq=prefsGatewayOK?txSequence.next(prefsGateway):0;
+  if(!seq) {Serial.println("[SEQ] NVS TX no disponible");return;}
   unsigned long ts = millis();
   JsonDocument doc;
   doc["id"] = NODO_ID;  doc["ts"] = ts;  doc["seq"] = seq;  doc["sensor"] = sensor;
@@ -289,7 +292,7 @@ void revisarMensajeEnMiTopico(JsonDocument& doc) {
   if (String((const char*)(doc["id"] | "")) != NODO_ID) return;
 
   unsigned long ts = doc["ts"] | 0UL;
-  unsigned long s  = doc["seq"] | 0UL;
+  uint64_t s = doc["seq"].as<uint64_t>();
   const char* sensor = doc["sensor"] | "";
   float valor      = doc["valor"] | -1.0f;
   const char* uni  = doc["unidad"] | "";
@@ -302,8 +305,8 @@ void revisarMensajeEnMiTopico(JsonDocument& doc) {
   // Un mensaje firmado que ya fue consumido no vuelve a ser admisible.
 
   const char* ataque = firmaOk ? "repeticion" : "suplantacion";
-  String motivo = firmaOk ? "Firma válida pero mensaje viejo reenviado (seq " + String(s) + ", actual " + String(seq) + ")"
-                          : "Firma HMAC inválida (seq " + String(s) + ")";
+  String motivo = firmaOk ? "Firma válida pero mensaje viejo reenviado (seq " + secuenciaLarga(s) + ", actual " + secuenciaLarga(seq) + ")"
+                          : "Firma HMAC inválida (seq " + secuenciaLarga(s) + ")";
 
   // Coherencia con el sensor real, el viento y las fuentes (pozas y secadores)
   if (strcmp(sensor, "gas") == 0 && valor < UMBRAL_ALERTA && gasPpm >= UMBRAL_ALERTA) {
@@ -438,7 +441,7 @@ void conectar() {
 void setup() {
   Serial.begin(115200);
   prefsGatewayOK=prefsGateway.begin("g1n3gw",false);
-  if(prefsGatewayOK) ultimoSeqGateway=prefsGateway.getULong64("lastSeq",0);
+  if(prefsGatewayOK) {txSequence.begin(prefsGateway);ultimoSeqGateway=prefsGateway.getULong64("lastSeq",0);}
   pinMode(PIN_LED, OUTPUT);
   analogReadResolution(12);
   WiFi.mode(WIFI_STA);

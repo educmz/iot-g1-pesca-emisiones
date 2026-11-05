@@ -51,3 +51,6 @@ Thumbs.db
 # Secretos locales paneles MQTT
 config.local.json
 **/config.local.json
+
+# Nodo 2 private configuration
+wokwi/nodo2-secadores/config.h

@@ -15,6 +15,10 @@ jobs:
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror -I wokwi/nodo5-gateway             wokwi/nodo5-gateway/tests/test_fog.cpp -o /tmp/test_fog
           /tmp/test_fog
+      - name: Probar historial y estados discretos
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror wokwi/nodo5-gateway/tests/test_history.cpp -o /tmp/test_history
+          /tmp/test_history
       - name: Validar JSON del circuito
         run: python3 -m json.tool wokwi/nodo5-gateway/diagram.json > /dev/null
       - name: Instalar soporte ESP32
@@ -33,6 +37,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/nodo5"
           cp wokwi/nodo5-gateway/sketch.ino "$RUNNER_TEMP/nodo5/nodo5.ino"
+          cp wokwi/nodo5-gateway/sample_history.h "$RUNNER_TEMP/nodo5/sample_history.h"
           cp wokwi/nodo5-gateway/fog_logic.h "$RUNNER_TEMP/nodo5/fog_logic.h"
           cp wokwi/nodo5-gateway/secrets.example.h "$RUNNER_TEMP/nodo5/secrets.h"
       - name: Compilar firmware ESP32

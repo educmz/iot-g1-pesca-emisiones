@@ -1,0 +1,48 @@
+name: Telemetry integration regression
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [fix/mqtt-integration-observability]
+jobs:
+  sequence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sequence reservation, reboot, storage failure and exhaustion
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror wokwi/nodo5-gateway/tests/test_sequence.cpp -o /tmp/test_sequence
+          /tmp/test_sequence
+          for dir in nodo2-secadores nodo3-perimetro nodo4-lavador; do
+            cmp wokwi/nodo1-pozas/wifi-scan/telemetry_sequence.h "wokwi/$dir/telemetry_sequence.h"
+          done
+  firmware:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {dir: nodo1-pozas/wifi-scan, source: wifi-scan.ino, config: secrets.example.h, target: secrets.h, libs: 'OneWire,DallasTemperature'}
+          - {dir: nodo2-secadores, source: sketch.ino, config: config.example.h, target: config.h, libs: 'DHT sensor library for ESPx'}
+          - {dir: nodo3-perimetro, source: sketch.ino, config: secrets.example.h, target: secrets.h, libs: ''}
+          - {dir: nodo4-lavador, source: sketch.ino, config: secrets.example.h, target: secrets.h, libs: ''}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Install ESP32 and libraries
+        env:
+          EXTRA_LIBS: ${{ matrix.libs }}
+        run: |
+          arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core install esp32:esp32 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli lib install PubSubClient 'ArduinoJson@7.4.2'
+          IFS=',' read -ra libs <<< "$EXTRA_LIBS"
+          for lib in "${libs[@]}"; do arduino-cli lib install "$lib"; done
+      - name: Stage public examples and compile
+        run: |
+          mkdir -p "$RUNNER_TEMP/firmware"
+          cp "wokwi/${{ matrix.dir }}/${{ matrix.source }}" "$RUNNER_TEMP/firmware/firmware.ino"
+          cp "wokwi/${{ matrix.dir }}/${{ matrix.config }}" "$RUNNER_TEMP/firmware/${{ matrix.target }}"
+          cp "wokwi/${{ matrix.dir }}/telemetry_sequence.h" "$RUNNER_TEMP/firmware/"
+          arduino-cli compile --fqbn esp32:esp32:esp32 "$RUNNER_TEMP/firmware" --warnings all
