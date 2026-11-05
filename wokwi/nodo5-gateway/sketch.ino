@@ -1,9 +1,30 @@
 /*
-  G1 Pesca / ResQ - Nodo 5 Gateway Fog (Eduardo)
-  Compatible con el contrato ACTUAL de los Nodos 1-4 en main.
-  NOTA: MQ-2/ADC/%/ppm simulado son indicadores didacticos, no H2S/NH3 reales.
-  Todas las claves se configuran localmente en secrets.h (no versionar).
-*/
+ * ============================================================
+ * G1 PESCA | NODO 5: GATEWAY FOG
+ * Responsable: Eduardo
+ * ============================================================
+ * FUNCION:
+ * - Centralizar las mediciones de los cuatro nodos ESP32.
+ * - Verificar HMAC-SHA256 y secuencias para decidir en Fog.
+ * ENTRADAS:
+ * - Datos MQTT de los nodos 1, 2, 3 y 4.
+ * - RTC DS1307 (GPIO21, 22), boton (GPIO25).
+ * SALIDAS:
+ * - Pantalla TFT ILI9341, NeoPixel (GPIO32).
+ * - Comandos MQTT firmados, respaldo seguro de actuadores.
+ * COMUNICACION:
+ * - ESP32/WiFi y MQTT en broker de pruebas compartido.
+ * - ThingSpeak opcional por HTTPS CA validada, en tarea aparte.
+ * SEGURIDAD:
+ * - HMAC por nodo, anti-replay y NVS.
+ * - Promedio movil y validacion de fuentes independientes.
+ * - Ante datos ausentes, no permitir orden OFF insegura.
+ * LIMITACIONES:
+ * - MQ-2 en Wokwi es simulado; NO es medicion certificada de H2S/NH3.
+ * - La estabilidad MQTT aun se investiga. Ver docs/diagnostico-mqtt-2026-11-05.md.
+ * - secrets.h contiene claves locales y NO debe versionarse.
+ * ============================================================
+ */
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
