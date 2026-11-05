@@ -2,7 +2,7 @@
 
 Laboratorio universitario para **Pesquera Costa Norte S.A.C. (caso ficticio)**: cinco nodos ESP32 simulados, MQTT, decisiones Edge/Fog, actuación y confirmación, ThingSpeak y dashboard HTML. La alternativa C de IA es **opcional**.
 
-> **Estado:** repositorio preparado para desarrollo colaborativo. Los circuitos, firmware, integración, pruebas y resultados aún deben implementarse y verificarse. No presentar plantillas como evidencia funcional.
+> **Estado al 05/11/2026:** firmwares de los cinco nodos y dashboard GitHub Pages implementados; envío HTTPS del Nodo 5 a ThingSpeak verificado (entradas guardadas). **Incidencia abierta:** desconexiones MQTT `state=-3` con WiFi conectado, y telemetría N2/N3/N4 no confirmada en la prueba distribuida. Las pruebas end-to-end y A/B siguen pendientes. Ver [diagnóstico](docs/diagnostico-mqtt-2026-11-05.md).
 
 ## Integrantes y responsabilidades
 
@@ -30,6 +30,16 @@ Laboratorio universitario para **Pesquera Costa Norte S.A.C. (caso ficticio)**: 
 - [Guía de integración](docs/integracion.md)
 - [Colaboración y Pull Requests](CONTRIBUTING.md)
 
+## Enlaces activos de simulación y nube
+
+- N1 Fernando: https://wokwi.com/projects/479819491217347585
+- N2 Fabricio: https://wokwi.com/projects/479809534640024577
+- N3 Gonzalo: https://wokwi.com/projects/479699850241480705
+- N4 Pedro: https://wokwi.com/projects/479710105894416385
+- N5 Eduardo: https://wokwi.com/projects/479700208383720449
+- [Dashboard en GitHub Pages](https://educmz.github.io/iot-g1-pesca-emisiones/); [canal ThingSpeak 3567916 (privado)](https://thingspeak.com/channels/3567916).
+- Broker **de laboratorio**: `broker.emqx.io:1883`, dashboard WebSocket `wss://broker.emqx.io:8084/mqtt`. El broker no tiene garantía de disponibilidad; cada Wokwi requiere configurar su archivo local y todas las instancias deben usar el mismo host y puerto.
+
 ## Inicio rápido del equipo
 
 1. El integrador acuerda el contrato MQTT con los cuatro responsables antes de conectarse al broker.
@@ -52,4 +62,4 @@ Laboratorio universitario para **Pesquera Costa Norte S.A.C. (caso ficticio)**: 
 
 **Restricciones:** sin LoRa; conectividad WAN ≤ S/ 150/mes; considerar corrosión salina; detección/acción local sin internet; heartbeat cada 30 s; confirmar lavador en ≤10 s; al perder gateway >60 s, lavador preventivo; ThingSpeak solo desde gateway a intervalos ≥15 s.
 
-Este repositorio contiene una **base de organización**, no una implementación ya validada.
+**No presentar el prototipo como integración end-to-end validada:** ThingSpeak funciona para campos 1 y 8; aún se deben comprobar los campos 2–7 con lecturas HMAC frescas. Las claves nunca se versionan.
