@@ -84,9 +84,14 @@ El Nodo 4 utiliza el protocolo MQTT para intercambiar comandos, estados y alerta
 | Topic | Propósito |
 |---|---|
 | `upc/g1/nodo4/cmd` | Recepción de comandos |
-| `upc/g1/nodo4/datos` | Publicación de datos |
+| `upc/g1/nodo4/datos` | Telemetría firmada, una lectura por sensor (dashboard grupal) |
+| `upc/g1/nodo4/paquete` | Paquete completo HMAC (panel individual) |
 | `upc/g1/nodo4/estado` | Publicación de estado y disponibilidad |
 | `upc/g1/nodo4/alerta` | Publicación de alertas de seguridad y funcionamiento |
+
+El firmware envía por `/datos` lecturas individuales de `lavador` (0/1), `confirmacion` (0/1 del interruptor), `intensidad` (1/2/3), `modo_seguro` (0/1) y `riesgo_alto` (0/1). Cada JSON incluye `id=nodo4,ts=millis(),seq,sensor,valor,unidad,calidad,firma` y se firma con HMAC-SHA256 sobre `id|ts|seq|sensor|valor(2 decimales)|unidad|calidad`.
+
+El estado agrupado anterior de `D4` permanece firmado en `/paquete` y lo sigue usando el panel individual. No se debe interpretar la señal `lavador=1` como confirmación física: solamente el interruptor en GPIO32 genera `confirmacion=1`.
 
 El firmware de Wokwi incorpora mecanismos de conexión, publicación y recepción MQTT.
 
@@ -194,7 +199,7 @@ Archivos principales:
 - `dashboard/bridge.py`
 - `dashboard/requirements.txt`
 - `dashboard/config.example.json`
-- `dashboard/panel/index.html`
+- `dashboard/panel/panel-nodo4.html`
 - `dashboard/panel/styles.css`
 - `dashboard/panel/app.js`
 
@@ -227,7 +232,7 @@ Se deben conservar las evidencias reales de:
 | Firmware ESP32 `sketch.ino` | Implementado |
 | Circuito Wokwi `diagram.json` | Implementado |
 | Archivo `libraries.txt` | Incluido |
-| Enlace Wokwi | Pendiente de agregar |
+| Enlace Wokwi | Registrado arriba |
 | Enlace Cirkit grupal | Registrado |
 | Enlace Cirkit individual | Pendiente de agregar |
 | Publicación MQTT | Probada individualmente |
@@ -236,5 +241,20 @@ Se deben conservar las evidencias reales de:
 | Ataque HMAC inválido | Rechazado en pruebas individuales |
 | Ataque Replay | Rechazado en pruebas individuales |
 | Dashboard HTML | Implementado y probado individualmente |
-| Evidencias en GitHub | Pendiente de completar |
+| Evidencias en GitHub | 8 archivos (7 capturas y un README) conservados |
 | Integración definitiva con D5 | Pendiente |
+
+
+## Integración corregida (noviembre de 2026)
+
+- **Arranque seguro:** si aún no hay heartbeat HMAC aceptado de D5, enciende el lavador de forma preventiva y selecciona intensidad máxima. La confirmación real no se supone: sigue dependiendo exclusivamente del switch.
+- **Pérdida de Gateway:** tras 60 s sin comando/heartbeat auténtico vuelve a modo seguro. No se permite OFF o reducir intensidad bajo riesgo alto ni en modo seguro.
+- **Vigencia de comandos:** requiere NTP UTC, una marca `ts` Unix en segundos (máximo 120 s antigua o 45 s futura), `seq` mayor que el aceptado y almacenamiento persistente válido. HMAC canónico del Gateway: `D5|ts|seq|cmd|valor`. Las órdenes remotas se rechazan sin firma, tiempo o contador válidos.
+- **Pruebas Serial:** un `HB` por consola **no** autentica D5. Los comandos de actuación por Serial están desactivados por defecto: activar el modo manual en código solo durante pruebas locales controladas.
+- **Datos:** `/datos` publica lectura por sensor HMAC (`nodo4`); `/paquete` conserva el reporte completo (`D4`) con HMAC y firma histórica. `/estado` tiene LWT JSON offline, orientativo y no autenticado, y heartbeat online firmado. La alarma `FALLA_LAVADOR` se publica firmada en `/alerta` tras 10 s sin confirmación.
+- **Claves:** el antiguo ejemplo `dashboard/config.example.json` contenía valores aparentemente utilizables que ya están expuestos en el historial Git. **Si se copiaron a Wokwi o al panel, hay que rotarlos** y sustituirlos por claves privadas distintas para D5 y D4. Los ejemplos actuales son marcadores; las claves privadas van en `config.local.json` y `secrets.h`, ignorados por Git.
+- **Simulación:** los archivos corregidos en GitHub **no actualizan** el proyecto remoto en Wokwi ni el diseño alojado en Cirkit. Pedro tiene que copiarlos, colocar claves nuevas y volver a demostrar ON, OFF condicionado, confirmación, fallo de 10 s, HMAC/replay y pérdida de Gateway.
+- **Hardware:** Wokwi simula el A4988 sin usar VMOT; un A4988 físico necesita alimentación del motor separada (normalmente 8–35 V), ajuste de corriente y desacoplo. El circuito no es apto para accionar maquinaria real sin un diseño eléctrico y de seguridad verificado.
+- **Integración D5:** Eduardo todavía debe implementar comandos firmados, verificar el estado/confirmación de Pedro y gestionar `FALLA_LAVADOR` para activar la ventilación de respaldo. La fusión de estos archivos no demuestra ese flujo conjunto.
+
+La simulación del lavador es educativa, no un controlador industrial.

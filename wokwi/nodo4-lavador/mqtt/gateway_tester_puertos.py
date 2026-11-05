@@ -74,7 +74,7 @@ def enviar_valido(cmd):
 def on_connect(client_, userdata, flags, reason_code, properties):
     if reason_code == 0:
         _conectado.set()
-        for topic in (CONFIG["topic_estado"], CONFIG["topic_datos"], CONFIG["topic_alerta"]):
+        for topic in (CONFIG["topic_estado"], CONFIG.get("topic_paquete", CONFIG["topic_datos"]), CONFIG["topic_alerta"]):
             client_.subscribe(topic)
         print(f"[MQTT] Conectado. Escuchando las salidas de D4.")
     else:

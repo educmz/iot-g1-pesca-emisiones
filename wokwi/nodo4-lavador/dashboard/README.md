@@ -11,3 +11,10 @@ Incluye controles de encendido, apagado y regulación del motor, además de prue
 Para ejecutarlo, se requiere Python, las dependencias de `requirements.txt` y un archivo `config.local.json` creado a partir de `config.example.json`. Las claves HMAC no deben publicarse en el repositorio.
 
 El panel se inicia ejecutando `bridge.py` y se consulta desde `http://127.0.0.1:8765`.
+
+
+### Cambios de integración
+
+El puente sirve ahora el archivo real `panel/panel-nodo4.html`, escucha los datos individuales firmados en `/datos` y recibe el paquete completo para su panel desde `/paquete`. Verifica ambos formatos HMAC. El estado `offline` es un LWT sin firma y solo indica disponibilidad.
+
+Para ejecutarlo se crea `config.local.json` copiando `config.example.json`, pero reemplazando **ambas** claves (D4 y D5) por valores privados nuevos de al menos 24 caracteres; los valores concretos que aparecían en Git anteriormente NO deben reutilizarse. El archivo local está ignorado por Git. Ejecutar la simulación corregida en Wokwi y verificar que sus claves coincidan con las del puente.
