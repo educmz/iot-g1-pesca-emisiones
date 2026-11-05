@@ -15,6 +15,9 @@ constexpr uint8_t PIN_ENABLE = 23;
 
 constexpr uint32_t LIMITE_CONFIRMACION_MS = 10000;
 constexpr uint32_t LIMITE_GATEWAY_MS = 60000;
+constexpr int64_t ATRASO_MAX_COMANDO_S = 120;
+constexpr int64_t ADELANTO_MAX_COMANDO_S = 45;
+constexpr bool PERMITIR_COMANDOS_SERIAL_DE_PRUEBA = false;
 constexpr uint32_t REPORTE_MS = 2000;
 constexpr uint32_t HEARTBEAT_MS = 30000;
 constexpr uint32_t RECONEXION_MS = 5000;
@@ -23,6 +26,8 @@ constexpr uint32_t WIFI_DIAGNOSTICO_MS = 5000;
 
 const char* TOPIC_CMD = "upc/g1/nodo4/cmd";
 const char* TOPIC_DATOS = "upc/g1/nodo4/datos";
+const char* TOPIC_PAQUETE = "upc/g1/nodo4/paquete"; // estado completo para panel individual
+const char* TOPIC_SEG = "upc/g1/seguridad/eventos";
 const char* TOPIC_ESTADO = "upc/g1/nodo4/estado";
 const char* TOPIC_ALERTA = "upc/g1/nodo4/alerta";
 
@@ -33,7 +38,7 @@ Preferences preferencias;
 bool lavadorEncendido = false;
 bool confirmado = false;
 bool fallaReportada = false;
-bool modoSeguro = false;
+bool modoSeguro = true; // Arranque preventivo: aun no hubo contacto D5 autenticado.
 bool riesgoAlto = false;
 uint8_t intensidad = 2;
 
@@ -51,6 +56,8 @@ uint32_t ultimoPasoUs = 0;
 uint64_t ultimoContadorControl = 0;
 uint64_t ultimoContadorHeartbeat = 0;
 uint32_t secuenciaReporte = 0;
+uint32_t secuenciaGrupo = 0;
+bool almacenamientoOK = false;
 String idCliente;
 
 const char* nombreIntensidad() {
@@ -83,7 +90,11 @@ String baseFirmaComando(const char* id, uint32_t ts, uint64_t seq,
 String firmaHmac(const String& texto, const char* clave) {
   unsigned char digest[32];
   const mbedtls_md_info_t* info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
-  if (!info || mbedtls_md_hmac(info, (const unsigned char*)clave, strlen(clave),
+  if (!info || !clave || strlen(clave) < 24 ||
+      strncmp(clave, "REEMPLAZAR", 9) == 0 ||
+      strncmp(clave, "G1_Gateway_Lab_", 15) == 0 ||
+      strncmp(clave, "G1_Nodo4_Lab_", 13) == 0 ||
+      mbedtls_md_hmac(info, (const unsigned char*)clave, strlen(clave),
                               (const unsigned char*)texto.c_str(), texto.length(), digest) != 0) {
     return "";
   }
@@ -133,7 +144,7 @@ void publicarEvento(const char* tipo, const char* motivo, uint64_t contador = 0)
   publicarJson(TOPIC_ALERTA, doc);
 }
 
-void publicarDatos() {
+void publicarPaquete() {
   StaticJsonDocument<640> doc;
   uint32_t ts = tiempoMensaje();
   String valor = lavadorEncendido ? "ON" : "OFF";
@@ -155,7 +166,36 @@ void publicarDatos() {
   String canonico = String("D4|") + ts + "|" + valor + "|estado_lavador|VALIDO|" +
                     nivel + "|" + confirmacion + "|" + seguro + "|" + riesgo + "|" + secuenciaReporte;
   doc["firma"] = firmaHmac(canonico, CLAVE_NODO4);
-  publicarJson(TOPIC_DATOS, doc);
+  publicarJson(TOPIC_PAQUETE, doc);
+}
+
+// Contrato MQTT de grupo: un mensaje independiente HMAC-SHA256 por sensor.
+// La firma protege id|ts_millis|seq|sensor|valor(2)|unidad|calidad.
+// NO confiar en los datos por el mero hecho de verlos en el dashboard.
+void publicarSensorGrupo(const char* sensor, float valor, const char* unidad) {
+  if (!mqtt.connected()) return;
+  const uint32_t ts=millis();
+  const uint32_t seq=++secuenciaGrupo;
+  const char* calidad="ok";
+  String canonico=String("nodo4|")+ts+"|"+seq+"|"+sensor+"|"+
+                  String(valor,2)+"|"+unidad+"|"+calidad;
+  String firma=firmaHmac(canonico,CLAVE_NODO4);
+  if(firma.length()!=64)return;
+  StaticJsonDocument<360> j;
+  j["id"]="nodo4"; j["ts"]=ts; j["seq"]=seq; j["sensor"]=sensor;
+  j["valor"]=serialized(String(valor,2));
+  j["unidad"]=unidad; j["calidad"]=calidad; j["firma"]=firma;
+  char out[400];
+  if(serializeJson(j,out,sizeof(out))>0)mqtt.publish(TOPIC_DATOS,out);
+}
+
+void publicarDatos() {
+  publicarPaquete();  // Firma original, para el panel local de Pedro
+  publicarSensorGrupo("lavador",lavadorEncendido?1.0f:0.0f,"estado");
+  publicarSensorGrupo("confirmacion",confirmado?1.0f:0.0f,"estado");
+  publicarSensorGrupo("intensidad",(float)intensidad,"nivel");
+  publicarSensorGrupo("modo_seguro",modoSeguro?1.0f:0.0f,"estado");
+  publicarSensorGrupo("riesgo_alto",riesgoAlto?1.0f:0.0f,"estado");
 }
 
 void publicarHeartbeat() {
@@ -164,6 +204,7 @@ void publicarHeartbeat() {
   doc["id"] = "D4";
   doc["ts"] = ts;
   doc["valor"] = "online";
+  doc["estado"] = "online";
   doc["unidad"] = "disponibilidad";
   doc["calidad"] = "VALIDO";
   doc["firma"] = firmaHmac(String("D4|") + ts + "|online|disponibilidad|VALIDO", CLAVE_NODO4);
@@ -317,7 +358,8 @@ void recibirMqtt(char* topic, byte* payload, unsigned int longitud) {
   StaticJsonDocument<768> doc;
   DeserializationError error = deserializeJson(doc, json);
   bool tsNumerico = doc["ts"].is<uint32_t>() || doc["ts"].is<int32_t>();
-  bool seqNumerico = doc["seq"].is<uint64_t>() || doc["seq"].is<int64_t>();
+  bool seqNumerico = doc["seq"].is<uint64_t>() || doc["seq"].is<int64_t>() ||
+                     doc["seq"].is<uint32_t>() || doc["seq"].is<int32_t>();
   if (error || !doc["id"].is<const char*>() || !doc["cmd"].is<const char*>() ||
       !doc["firma"].is<const char*>() || !tsNumerico ||
       !seqNumerico || !doc["valor"].is<const char*>()) {
@@ -330,8 +372,17 @@ void recibirMqtt(char* topic, byte* payload, unsigned int longitud) {
   String cmd = doc["cmd"].as<String>();
   String valor = doc["valor"].as<String>();
   String firma = doc["firma"].as<String>();
-  if (id != "D5" || !comandoPermitido(cmd) || ts == 0 || valor.length() > 50) {
+  if (id != "D5" || !comandoPermitido(cmd) || ts == 0 || seq == 0 || valor.length() > 50) {
     publicarEvento("ORDEN_RECHAZADA", "ORIGEN_O_ORDEN_INVALIDA", seq);
+    return;
+  }
+  // Sin hora NTP fiable nunca aceptar una orden remota, aunque esté firmada.
+  // Evita aceptar una captura vieja con seq superior que fuerce un actuador.
+  time_t utc = time(nullptr);
+  if (utc < 1700000000LL ||
+      (int64_t)utc-(int64_t)ts > ATRASO_MAX_COMANDO_S ||
+      (int64_t)ts-(int64_t)utc > ADELANTO_MAX_COMANDO_S) {
+    publicarEvento("ORDEN_RECHAZADA", "TS_FUERA_DE_VENTANA_O_SIN_NTP", seq);
     return;
   }
   String canonico = baseFirmaComando(id.c_str(), ts, seq, cmd.c_str(), valor.c_str());
@@ -347,6 +398,10 @@ void recibirMqtt(char* topic, byte* payload, unsigned int longitud) {
     Serial.printf("[CIBERSEGURIDAD] REPLAY RECHAZADO CMD=%s SEQ=%llu ULTIMO=%llu\n",
                   cmd.c_str(), (unsigned long long)seq, (unsigned long long)ultimoAceptado);
     publicarEvento("REPLAY_BLOQUEADO", "CONTADOR_REPETIDO_O_ANTERIOR", seq);
+    return;
+  }
+  if(!almacenamientoOK) {
+    publicarEvento("ORDEN_RECHAZADA","NVS_INDISPONIBLE",seq);
     return;
   }
   size_t bytes = preferencias.putULong64(esHeartbeat ? "seqHB" : "seqCtrl", seq);
@@ -405,7 +460,7 @@ void conectarRed() {
   mqttIntentado = true;
   ultimoIntentoMqtt = ahora;
 
-  if (mqtt.connect(idCliente.c_str(), TOPIC_ESTADO, 1, true, "offline")) {
+  if (mqtt.connect(idCliente.c_str(), TOPIC_ESTADO, 1, true, "{\"id\":\"nodo4\",\"estado\":\"offline\"}")) {
     Serial.println("[MQTT] CONECTADO broker.hivemq.com:1883");
     if (mqtt.subscribe(TOPIC_CMD, 1)) {
       Serial.printf("[MQTT] SUBSCRITO=%s\n", TOPIC_CMD);
@@ -429,15 +484,17 @@ void procesarComandoSerial(String comando) {
     ultimoContactoGateway = millis() - LIMITE_GATEWAY_MS - 1UL;
     comprobarModoSeguro();
   } else if (comando == "HB") {
-    Serial.println("[LOCAL] HB es solo diagnostico; no autentica contacto MQTT");
-    ultimoContactoGateway = millis();
-    modoSeguro = false;
+    Serial.println("[LOCAL] HB manual NO autentica contacto, modo seguro no cambia");
   } else if (comando == "ON" || comando == "OFF" || comando == "BAJO" ||
              comando == "MEDIO" || comando == "MAX" ||
              comando == "RIESGO_ON" || comando == "RIESGO_OFF") {
-    Serial.printf("[LOCAL] COMANDO DE PRUEBA POR SERIAL: %s\n", comando.c_str());
-    ejecutarOrden(comando);
-    publicarDatos();
+    if (PERMITIR_COMANDOS_SERIAL_DE_PRUEBA) {
+      Serial.printf("[LOCAL] COMANDO DE PRUEBA POR SERIAL: %s\n", comando.c_str());
+      ejecutarOrden(comando);
+      publicarDatos();
+    } else {
+      Serial.println("[LOCAL] Control serial bloqueado; use /cmd con HMAC");
+    }
   } else if (comando == "AYUDA") {
     Serial.println("[LOCAL] ESTADO | ON | OFF | BAJO | MEDIO | MAX | RIESGO_ON | RIESGO_OFF | SIN_GATEWAY | HB");
     Serial.println("[MQTT] SOLO /cmd CON HMAC Y CONTADOR PUEDE SIMULAR ORDENES REMOTAS");
@@ -457,11 +514,16 @@ void setup() {
   digitalWrite(PIN_STEP, LOW);
   digitalWrite(PIN_DIR, HIGH);
   actualizarSalidas();
-  preferencias.begin("g1d4-mqtt", false);
-  uint64_t contadorAnterior = preferencias.getULong64("ultimoSeq", 0);
-  ultimoContadorControl = preferencias.getULong64("seqCtrl", contadorAnterior);
-  ultimoContadorHeartbeat = preferencias.getULong64("seqHB", contadorAnterior);
-  ultimoContactoGateway = millis();
+  almacenamientoOK = preferencias.begin("g1d4-mqtt", false);
+  if(!almacenamientoOK)Serial.println("[SEGURIDAD] NVS no disponible: comandos MQTT se rechazaran");
+  if(almacenamientoOK){
+    uint64_t contadorAnterior = preferencias.getULong64("ultimoSeq", 0);
+    ultimoContadorControl = preferencias.getULong64("seqCtrl", contadorAnterior);
+    ultimoContadorHeartbeat = preferencias.getULong64("seqHB", contadorAnterior);
+  }
+  ultimoContactoGateway = 0;  // Sin D5 auténtico, NUNCA asumir contacto al arrancar
+  intensidad = 3;
+  encenderLavador("ARRANQUE_PREVENTIVO_SIN_GATEWAY");
   ultimoReporte = millis();
   ultimoHeartbeat = millis();
   idCliente = "g1-pesca-d4-" + String((uint32_t)(ESP.getEfuseMac() & 0xffffffff), HEX);
