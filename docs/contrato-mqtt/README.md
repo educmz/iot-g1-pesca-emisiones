@@ -43,6 +43,6 @@ El nodo 4 verifica **firma + contador de secuencia creciente + regla de segurida
 
 ### Acceso y limitaciones
 
-Broker HiveMQ público para integración online. Definir WebSocket/WSS en configuración local del dashboard. El broker público **no asegura disponibilidad ni privacidad**. Los nodos deben actuar localmente sin WAN; el lavador mantiene el temporizador preventivo. Solo el gateway publica en ThingSpeak cada **15 s o más**.
+Broker público **EMQX** usado en la simulación actual: ESP32 `broker.emqx.io:1883`; dashboard WSS `wss://broker.emqx.io:8084/mqtt`. Las plantillas anteriores con HiveMQ se actualizaron. Verificar cada Wokwi, ya que no se sincroniza automáticamente con GitHub. Estado real y fallas: [diagnóstico](../diagnostico-mqtt-2026-11-05.md). El broker público **no asegura disponibilidad ni privacidad**. Los nodos deben actuar localmente sin WAN; el lavador mantiene el temporizador preventivo. Solo el gateway publica en ThingSpeak cada **15 s o más**.
 
 **Pendiente de aprobación grupal:** convención exacta de firma, reloj, QoS, retained, contador tras reinicio y comandos. Documentar el acuerdo antes de integrar.
