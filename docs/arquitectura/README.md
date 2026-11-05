@@ -18,6 +18,6 @@
 | 4 — Lavador (Pedro) | interruptor digital de confirmación | relé de lavador, paso a paso + A4988 |
 | 5 — Gateway (Eduardo) | pulsador digital, RTC DS1307 I2C | TFT ILI9341 SPI, NeoPixel |
 
-Diagrama obligatorio: **un Cirkit general con los cinco nodos**, mostrando entradas, salidas y tipo de señal. Cada integrante aporta su sección; Fernando consolida el conjunto con la revisión de Eduardo.
+**Diagrama general de los cinco nodos:** [proyecto compartido en Cirkit Designer](https://app.cirkitdesigner.com/project/373d1c97-d707-40e2-8416-f6e8a5aca5a3). El enlace está registrado. Pendientes de incorporar la captura exportada, señalización de conexiones y verificación formal contra Wokwi. Fernando consolida y Eduardo revisa.
 
 La autonomía crítica local **no equivale** a que el broker público o la coordinación remota funcionen cuando cae internet. Documentar el límite y demostrar mecanismos Edge y modo seguro.
