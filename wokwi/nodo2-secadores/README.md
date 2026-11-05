@@ -1,7 +1,7 @@
 # Entrega Fabricio — Nodo 2 Secadores
 
 **Rama:** `nodo2-fabricio`  
-**Wokwi:** https://wokwi.com/projects/479809534640024577  
+**Wokwi:** https://wokwi.com/projects/479864093839705089  
 **Cirkit:** https://app.cirkitdesigner.com/project/8ba81817-a151-413c-afa1-c8969ae08a86
 
 ## Qué está probado / qué requiere evidencia
