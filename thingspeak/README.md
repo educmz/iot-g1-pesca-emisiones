@@ -1,13 +1,23 @@
-# Integración ThingSpeak (pendiente)
+# Integración ThingSpeak — G1 Pesca
 
-**Solo el gateway** escribe al canal ThingSpeak, con separación **≥15 segundos** entre escrituras. El HTML no debe usar la clave de escritura; si el canal es privado, usar únicamente el mecanismo de lectura autorizado.
+**Estado al 05/11/2026:** D5 envió mediante HTTPS y ThingSpeak confirmó **HTTP 200 con entry_id>0** (varios registros). **No** está validada la subida de campos 2–7 bajo los cinco Wokwi simultáneos.
 
-Por documentar después de crear el canal:
-- ID de canal:
-- Campos asignados (máximo compatible con el plan utilizado):
-- Frecuencia real de actualización:
-- Captura de gráficos y prueba de envío:
-- URL pública o URL de visualización autorizada:
-- Estrategia de reintento/almacenamiento temporal si no hay WAN:
+- Canal: **3567916**, privado: https://thingspeak.com/channels/3567916
+- Solo **Gateway D5** escribe; Write API Key y certificado CA válidos se configuran en secrets.h privado y no se comparten.
+- Intervalo del sketch de diagnóstico: **25 s**, mayor al mínimo académico de 15 s.
+- Campo 1: Nivel riesgo Fog (0 normal, 1 alerta, 2 crítico).
+- Campo 2: Gas Nodo 1 (ADC).
+- Campo 3: Gas Nodo 2 (% relativo).
+- Campo 4: Gas Nodo 3 (ppm simulado, NO calibrado).
+- Campo 5: Dirección viento (grados).
+- Campo 6: Estado lavador.
+- Campo 7: Confirmación lavador.
+- Campo 8: Ventilación de respaldo.
 
-No subir Write API Key, HMAC, ni contraseñas al repositorio.
+El Gateway transmite fields 1 y 8 siempre que exista WiFi, reloj válido, CA y API key. Solo agrega fields 2–7 si sus lecturas fueron **verificadas por HMAC** y se mantienen **frescas por 12 s**. No inventa ceros para datos ausentes.
+
+HTTPS se envía desde una tarea FreeRTOS separada. Mensajes importantes del monitor: "[ThingSpeak] Preparado: N campos", "GUARDADO HTTP 200 entry_id=X", "NO GUARDADO" o "FALLO HTTPS". HTTP 200 con respuesta "0" NO confirma escritura.
+
+**Problema abierto:** el ESP32 Gateway se desconecta de MQTT aun con WiFi conectado (state=-3). La capa HTTPS guardó datos, pero los sensores no llegan en forma continua. Ver [guía de diagnóstico](../docs/diagnostico-mqtt-2026-11-05.md).
+
+**Privacidad:** el canal es privado; el dashboard estático no puede incrustar sus gráficas sin una vía de lectura autorizada. Nunca publicar Write API Key, Read API Key privada ni HMAC en GitHub Pages.

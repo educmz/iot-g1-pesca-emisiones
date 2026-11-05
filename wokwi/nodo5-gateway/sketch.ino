@@ -1,13 +1,37 @@
 /*
-  G1 Pesca / ResQ - Nodo 5 Gateway Fog (Eduardo)
-  Compatible con el contrato ACTUAL de los Nodos 1-4 en main.
-  NOTA: MQ-2/ADC/%/ppm simulado son indicadores didacticos, no H2S/NH3 reales.
-  Todas las claves se configuran localmente en secrets.h (no versionar).
-*/
+ * ============================================================
+ * G1 PESCA | NODO 5: GATEWAY FOG
+ * Responsable: Eduardo
+ * ============================================================
+ * FUNCION:
+ * - Centralizar las mediciones de los cuatro nodos ESP32.
+ * - Verificar HMAC-SHA256 y secuencias para decidir en Fog.
+ * ENTRADAS:
+ * - Datos MQTT de los nodos 1, 2, 3 y 4.
+ * - RTC DS1307 (GPIO21, 22), boton (GPIO25).
+ * SALIDAS:
+ * - Pantalla TFT ILI9341, NeoPixel (GPIO32).
+ * - Comandos MQTT firmados, respaldo seguro de actuadores.
+ * COMUNICACION:
+ * - ESP32/WiFi y MQTT en broker de pruebas compartido.
+ * - ThingSpeak opcional por HTTPS CA validada, en tarea aparte.
+ * SEGURIDAD:
+ * - HMAC por nodo, anti-replay y NVS.
+ * - Promedio movil y validacion de fuentes independientes.
+ * - Ante datos ausentes, no permitir orden OFF insegura.
+ * LIMITACIONES:
+ * - MQ-2 en Wokwi es simulado; NO es medicion certificada de H2S/NH3.
+ * - La estabilidad MQTT aun se investiga. Ver docs/diagnostico-mqtt-2026-11-05.md.
+ * - secrets.h contiene claves locales y NO debe versionarse.
+ * ============================================================
+ */
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/queue.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include <Preferences.h>
@@ -28,11 +52,13 @@ constexpr uint8_t BTN_PIN=25, LED_PIN=32, I2C_SDA=21, I2C_SCL=22;
 constexpr uint32_t MQTT_RETRY_MS=15000, WIFI_RETRY_MS=45000;
 constexpr uint32_t HEARTBEAT_MS=20000, D5_STATUS_MS=30000;
 constexpr uint32_t FOG_MS=1000, SCREEN_MS=1000, SAMPLE_MAX_AGE_MS=12000;
-constexpr uint32_t CONFIRM_WAIT_MS=10000, THINGSPEAK_MS=20000;
+constexpr uint32_t CONFIRM_WAIT_MS=10000, THINGSPEAK_MS=25000;
+// Poner false SOLO si se necesita una prueba aislando MQTT de HTTPS.
+constexpr bool ENABLE_THINGSPEAK=true;
 constexpr uint32_t BUTTON_DEBOUNCE_MS=60, RELEASE_HOLD_MS=2500;
 constexpr int SENSOR_HISTORY=3;
 
-const char* MQTT_HOST="broker.hivemq.com";
+const char* MQTT_HOST="broker.emqx.io";
 const uint16_t MQTT_PORT=1883;
 const char* T_STATUS="upc/g1/nodo5/estado";
 const char* T_ALERT="upc/g1/nodo5/alerta";
@@ -45,6 +71,13 @@ Preferences prefs;
 Adafruit_ILI9341 tft(TFT_CS,TFT_DC,TFT_RST);
 Adafruit_NeoPixel pixel(1,LED_PIN,NEO_GRB+NEO_KHZ800);
 RTC_DS1307 rtc;
+
+// HTTPS usa una tarea separada: la tarea principal puede seguir
+// ejecutando mqtt.loop() y verificando los mensajes HMAC.
+// La cola almacena una copia de los campos al programar cada envio.
+struct ThingSpeakRequest { char body[320]; };
+QueueHandle_t thingspeakQueue=nullptr;
+bool thingspeakWorkerReady=false;
 
 struct History {
   float samples[SENSOR_HISTORY]={0,0,0};
@@ -305,6 +338,12 @@ void acceptSecurityEvent(byte* bytes,unsigned int length) {
   } else totalUntrustedEvents++;
 }
 void onMQTT(char* topic,byte* payload,unsigned int length) {
+  static uint32_t recibidos=0;
+  recibidos++;
+  if(recibidos<=10 || recibidos%20==0) {
+    Serial.printf("[MQTT RX] Topico=%s bytes=%u total=%lu\n",
+                  topic,length,(unsigned long)recibidos);
+  }
   if(strcmp(topic,T_D4_ALERT)==0) {acceptD4Alert(payload,length);return;}
   if(strcmp(topic,T_SECURITY)==0) {acceptSecurityEvent(payload,length);return;}
   if(nodeForTopic(topic)>=0)acceptData(topic,payload,length);
@@ -523,7 +562,8 @@ void handleNetwork(uint32_t now) {
   }
   if(mqttWasConnected) {
     mqttWasConnected=false;
-    Serial.println("[MQTT] Conexion perdida, iniciando recuperacion");
+    Serial.printf("[MQTT] Conexion perdida: state=%d WiFi=%d uptime=%lu s; reintentando\n",
+                  mqtt.state(),int(WiFi.status()),(unsigned long)(millis()/1000));
   }
   if(lastMQTT && (uint32_t)(now-lastMQTT)<MQTT_RETRY_MS)return;
   lastMQTT=now;
@@ -546,35 +586,95 @@ void handleNetwork(uint32_t now) {
                   mqtt.state(),(unsigned long)(MQTT_RETRY_MS/1000));
   }
 }
-// ThingSpeak is OPTIONAL; require HTTPS CA and private Write API key.
-// No write occurs with example values and no credentials are committed.
+// La comunicacion HTTPS transcurre en otra tarea para que no bloquee
+// el loop MQTT. No se comparte WiFiClient de MQTT con el HTTPClient.
+void thingspeakWorker(void* parameter) {
+  ThingSpeakRequest req;
+  for(;;) {
+    if(xQueueReceive(thingspeakQueue,&req,portMAX_DELAY)!=pdTRUE)continue;
+    if(WiFi.status()!=WL_CONNECTED) {
+      Serial.println("[ThingSpeak] OMITIDO: sin WiFi al iniciar HTTPS");
+      continue;
+    }
+    WiFiClientSecure secure;
+    secure.setCACert(THINGSPEAK_ROOT_CA); // Nunca desactivar TLS.
+    secure.setTimeout(5000);
+    HTTPClient http;
+    http.setTimeout(5000);
+    if(!http.begin(secure,"https://api.thingspeak.com/update")) {
+      Serial.println("[ThingSpeak] ERROR: inicializacion HTTPS");
+      continue;
+    }
+    http.addHeader("Content-Type","application/x-www-form-urlencoded");
+    Serial.println("[ThingSpeak] Enviando HTTPS en tarea independiente");
+    int status=http.POST((uint8_t*)req.body,strlen(req.body));
+    if(status>0) {
+      String respuesta=http.getString();
+      respuesta.trim();
+      long entrada=respuesta.toInt();
+      if(status==200 && entrada>0) {
+        Serial.printf("[ThingSpeak] GUARDADO HTTP 200 entry_id=%ld\n",entrada);
+      } else {
+        Serial.printf("[ThingSpeak] NO GUARDADO HTTP %d respuesta=%s\n",
+                      status,respuesta.substring(0,64).c_str());
+      }
+    } else {
+      Serial.printf("[ThingSpeak] FALLO HTTPS codigo=%d detalle=%s\n",
+                    status,http.errorToString(status).c_str());
+    }
+    http.end();
+    // El buffer req contiene la Write API Key: limpiarlo despues de usarlo.
+    memset(req.body,0,sizeof(req.body));
+  }
+}
+
+// Captura solo lecturas frescas/HMAC verificadas.
+// La tarea MQTT nunca espera la respuesta de ThingSpeak.
 void sendThingSpeak(uint32_t now) {
-  if(now-lastThingSpeak<THINGSPEAK_MS || !mqtt.connected() ||
-     WiFi.status()!=WL_CONNECTED)return;
+  if(!ENABLE_THINGSPEAK)return;
+  if((uint32_t)(now-lastThingSpeak)<THINGSPEAK_MS)return;
   lastThingSpeak=now;
+
+  if(WiFi.status()!=WL_CONNECTED) {
+    Serial.println("[ThingSpeak] OMITIDO: WiFi desconectado");return;
+  }
+  if(!clockReady()) {
+    Serial.println("[ThingSpeak] OMITIDO: reloj UTC pendiente");return;
+  }
   if(strlen(THINGSPEAK_WRITE_API_KEY)<12 ||
-     strncmp(THINGSPEAK_WRITE_API_KEY,"REEMPLAZAR",9)==0 ||
-     strlen(THINGSPEAK_ROOT_CA)<200)return;
-  WiFiClientSecure secure;
-  secure.setCACert(THINGSPEAK_ROOT_CA);
-  secure.setTimeout(3500);
-  HTTPClient http;
-  http.setTimeout(3500);
-  if(!http.begin(secure,"https://api.thingspeak.com/update"))return;
-  http.addHeader("Content-Type","application/x-www-form-urlencoded");
+     strncmp(THINGSPEAK_WRITE_API_KEY,"REEMPLAZAR",9)==0) {
+    Serial.println("[ThingSpeak] OMITIDO: falta Write API Key");return;
+  }
+  if(strlen(THINGSPEAK_ROOT_CA)<200 ||
+     strstr(THINGSPEAK_ROOT_CA,"-----BEGIN CERTIFICATE-----")==nullptr ||
+     strstr(THINGSPEAK_ROOT_CA,"-----END CERTIFICATE-----")==nullptr) {
+    Serial.println("[ThingSpeak] OMITIDO: falta certificado CA PEM");return;
+  }
+  if(!thingspeakWorkerReady || !thingspeakQueue) {
+    Serial.println("[ThingSpeak] ERROR: tarea HTTPS no disponible");return;
+  }
   String body=String("api_key=")+THINGSPEAK_WRITE_API_KEY+
     "&field1="+String(current.level)+
     "&field8="+String(backupLatched?1:0);
-  // Do not substitute zero for a missing/unverified sensor.
-  if(n1Gas.fresh())body+="&field2="+String(n1Gas.avg(),0);
-  if(n2Gas.fresh())body+="&field3="+String(n2Gas.avg(),1);
-  if(n3Gas.fresh())body+="&field4="+String(n3Gas.avg(),0);
-  if(n3Wind.fresh())body+="&field5="+String(n3Wind.avg(),0);
-  if(n4Lavador.fresh())body+="&field6="+String(n4Lavador.avg(),0);
-  if(n4Confirm.fresh())body+="&field7="+String(n4Confirm.avg(),0);
-  int status=http.POST(body);
-  Serial.printf("[ThingSpeak] HTTP %d\n",status);
-  http.end();
+  int fields=2;
+  if(n1Gas.fresh()) {body+="&field2="+String(n1Gas.avg(),0);fields++;}
+  if(n2Gas.fresh()) {body+="&field3="+String(n2Gas.avg(),1);fields++;}
+  if(n3Gas.fresh()) {body+="&field4="+String(n3Gas.avg(),0);fields++;}
+  if(n3Wind.fresh()) {body+="&field5="+String(n3Wind.avg(),0);fields++;}
+  if(n4Lavador.fresh()) {body+="&field6="+String(n4Lavador.avg(),0);fields++;}
+  if(n4Confirm.fresh()) {body+="&field7="+String(n4Confirm.avg(),0);fields++;}
+  ThingSpeakRequest req={};
+  if(body.length()>=sizeof(req.body)) {
+    Serial.println("[ThingSpeak] ERROR: datos demasiado largos");return;
+  }
+  body.toCharArray(req.body,sizeof(req.body));
+  if(xQueueOverwrite(thingspeakQueue,&req)==pdPASS) {
+    Serial.printf("[ThingSpeak] Preparado: %d campos (WiFi=OK MQTT=%s)\n",
+                  fields,mqtt.connected()?"OK":"OFF");
+  } else {
+    Serial.println("[ThingSpeak] ERROR: no se pudo encolar HTTPS");
+  }
+  memset(req.body,0,sizeof(req.body));
 }
 void setup() {
   Serial.begin(115200);
@@ -598,14 +698,25 @@ void setup() {
   mqtt.setServer(MQTT_HOST,MQTT_PORT);
   mqtt.setCallback(onMQTT);
   mqtt.setBufferSize(1024);
-  mqtt.setKeepAlive(30);
-  mqtt.setSocketTimeout(4); // seconds; Wokwi/public broker may respond slowly
+  // Pings mas frecuentes; mayor tolerancia a lecturas TCP lentas en Wokwi.
+  mqtt.setKeepAlive(20);
+  mqtt.setSocketTimeout(8);
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
   WiFi.begin(WIFI_SSID,WIFI_PASSWORD,6);
   lastWifi=millis();
   Serial.println("[WiFi] Buscando Wokwi-GUEST sin reiniciar el intento");
   configTime(0,0,"pool.ntp.org","time.google.com");
+  if(ENABLE_THINGSPEAK) {
+    thingspeakQueue=xQueueCreate(1,sizeof(ThingSpeakRequest));
+    if(thingspeakQueue) {
+      BaseType_t started=xTaskCreatePinnedToCore(
+        thingspeakWorker,"ThingSpeakHTTPS",12288,nullptr,1,nullptr,0);
+      thingspeakWorkerReady=(started==pdPASS);
+    }
+    Serial.printf("[ThingSpeak] Tarea HTTPS independiente: %s\n",
+                  thingspeakWorkerReady?"OK":"ERROR");
+  }
   Serial.println("[D5] Fog seguro: espera telemetria firmada; no usa datos falsos");
   drawScreen();
 }
@@ -613,11 +724,15 @@ void loop() {
   uint32_t now=millis();
   handleNetwork(now);
   if(mqtt.connected()) {
-    mqtt.loop();
-    if(!lastHB || now-lastHB>=HEARTBEAT_MS) {
+    bool mqttLoopOK=mqtt.loop();
+    if(!mqttLoopOK) {
+      Serial.printf("[MQTT] loop fallo state=%d WiFi=%d\n",
+                    mqtt.state(),int(WiFi.status()));
+    }
+    if(mqtt.connected() && (!lastHB || now-lastHB>=HEARTBEAT_MS)) {
       lastHB=now;sendHeartbeats();
     }
-    if(!lastStatus || now-lastStatus>=D5_STATUS_MS) {
+    if(mqtt.connected() && (!lastStatus || now-lastStatus>=D5_STATUS_MS)) {
       lastStatus=now;publishStatus();
     }
   }
