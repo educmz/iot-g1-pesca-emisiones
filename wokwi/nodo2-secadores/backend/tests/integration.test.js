@@ -11,7 +11,7 @@ test('dashboard sin red: lectura firmada y suplantación rechazada vía endpoint
   try{
     const port=server.address().port;
     const first=newDemoPayload();
-    const admitted=acceptMessage(first,'upc/g1/nodo2/datos');
+    const admitted=acceptMessage(first,'upc/g1/nodo2/paquete');
     assert.equal(admitted.ok,true);
     let r=await req(port,'/api/state');assert.equal(r.status,200);assert.equal(r.body.last.firma,first.firma);
     const savedSeq=r.body.last.seq;
@@ -19,7 +19,7 @@ test('dashboard sin red: lectura firmada y suplantación rechazada vía endpoint
     // DEMO_MODE=1: ataque simulado recorre el mismo verificador HMAC local.
     assert.equal(r.status,202);assert.equal(r.body.simulatedLocally,true);
     const fake={...newDemoPayload(),firma:'0'.repeat(64)};
-    assert.equal(acceptMessage(fake,'upc/g1/nodo2/datos').reason,'HMAC_INVALIDO');
+    assert.equal(acceptMessage(fake,'upc/g1/nodo2/paquete').reason,'HMAC_INVALIDO');
     r=await req(port,'/api/state');assert.equal(r.body.last.seq,savedSeq);
     assert.equal(r.body.security[0].motivo,'HMAC_INVALIDO');
     r=await req(port,'/api/export.csv');assert.equal(r.status,200);assert.match(r.body,/nodo2/);

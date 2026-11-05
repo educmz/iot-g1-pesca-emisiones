@@ -1,0 +1,22 @@
+name: Pruebas backend Nodo 2
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [nodo2-fabricio]
+jobs:
+  backend-nodo2:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verificar sintaxis
+        working-directory: wokwi/nodo2-secadores/backend
+        run: |
+          node --check server.js
+          node --check lib/group-protocol.js
+      - name: Ejecutar pruebas MQTT y HMAC
+        working-directory: wokwi/nodo2-secadores/backend
+        run: npm test
