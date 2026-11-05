@@ -175,7 +175,7 @@ Cada integrante aporta su diseño. **Se exige un diagrama general de los cinco n
 | N2 | [Cirkit Fabricio](https://app.cirkitdesigner.com/project/8ba81817-a151-413c-afa1-c8969ae08a86) |
 | N3 | [Cirkit Gonzalo](https://app.cirkitdesigner.com/project/37ff5f4e-1d1d-4788-b2f4-8eea0eca768c) |
 | N4 | [Cirkit Pedro](https://app.cirkitdesigner.com/project/4663bde6-8941-4af3-a259-1a44f4c8d95b) |
-| N5 | [Circuito documentado en Wokwi](wokwi/nodo5-gateway/diagram.json); ubicación Cirkit por confirmar. |
+| N5 | [Circuito del Gateway en Wokwi](wokwi/nodo5-gateway/diagram.json) y [proyecto general Cirkit](https://app.cirkitdesigner.com/project/373d1c97-d707-40e2-8416-f6e8a5aca5a3); contrastar ambos al revisar la captura. |
 
 **Diagrama general compartido por el equipo:** [Abrir diseño integrado en Cirkit Designer](https://app.cirkitdesigner.com/project/373d1c97-d707-40e2-8416-f6e8a5aca5a3). **Enlace registrado.** Aún falta añadir a GitHub una **captura exportada del diagrama** y documentar la **revisión de señales, GPIO, alimentación y concordancia con Wokwi**. No se ha podido inspeccionar gráficamente el contenido del proyecto desde este acceso. [Carpeta general](cirkit/diagrama-general/README.md).
 
@@ -250,7 +250,7 @@ Cada integrante aporta su diseño. **Se exige un diagrama general de los cinco n
 | 3 | Gas N2 (% relativo). | 7 | Confirmación N4. |
 | 4 | Gas N3 (ppm simulados). | 8 | Ventilación respaldo. |
 
-**Evidencia observada:** ThingSpeak devolvió `HTTP 200` con `entry_id > 0`. En sesiones sin telemetría reciente se prepararon solamente **fields 1 y 8**; por tanto, **fields 2–7 y operación simultánea de cinco Wokwi siguen pendientes de verificación**. No colocar API keys en la web; el canal sigue privado.
+**Evidencia anterior documentada:** ThingSpeak devolvió `HTTP 200` con `entry_id > 0`; durante las fallas MQTT previas se prepararon solamente **fields 1 y 8**. El equipo informa que **actualmente funcionan los cinco nodos**, pero falta añadir capturas o registros actuales que acrediten los **fields 2–7** y la ejecución simultánea. No colocar API keys en la web; el canal sigue privado.
 
 **Contingencia:** A = MQTT WSS + ThingSpeak; B = cambiar acceso de red o usar lectura autorizada de ThingSpeak; C = TFT y CSV histórico **identificado como tal**. No afirmar que esos planes fueron validados sin evidencia. [Guía de integración](docs/integracion.md).
 
