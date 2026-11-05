@@ -1,27 +1,155 @@
 {
   "version": 1,
-  "author": "Fernando",
+  "author": "G1 Pesca - Fernando / correccion Nodo 1",
   "editor": "wokwi",
   "parts": [
-    { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": 0, "left": 0, "attrs": {} },
-    { "type": "wokwi-potentiometer", "id": "pot1", "top": -60, "left": 150, "attrs": {} },
-    { "type": "wokwi-ds18b20", "id": "temp1", "top": 80, "left": 150, "attrs": {} },
-    { "type": "wokwi-led", "id": "led1", "top": -40, "left": -100, "attrs": { "color": "red" } },
-    { "type": "wokwi-relay-module", "id": "relay1", "top": 80, "left": -150, "attrs": {} }
+    {
+      "type": "board-esp32-devkit-c-v4",
+      "id": "esp",
+      "top": 0,
+      "left": 0,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-gas-sensor",
+      "id": "mq2",
+      "top": -140,
+      "left": 175,
+      "attrs": {
+        "ppm": "400"
+      }
+    },
+    {
+      "type": "wokwi-ds18b20",
+      "id": "temp1",
+      "top": 55,
+      "left": 180,
+      "attrs": {
+        "temperature": "22"
+      }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "rpull",
+      "top": 25,
+      "left": 140,
+      "rotate": 90,
+      "attrs": {
+        "value": "4700"
+      }
+    },
+    {
+      "type": "wokwi-buzzer",
+      "id": "buzzer1",
+      "top": -65,
+      "left": -145,
+      "attrs": {
+        "volume": "0.4"
+      }
+    },
+    {
+      "type": "wokwi-relay-module",
+      "id": "relay1",
+      "top": 105,
+      "left": -170,
+      "attrs": {}
+    }
   ],
   "connections": [
-    [ "esp:TX", "$serialMonitor:RX", "", [] ],
-    [ "esp:RX", "$serialMonitor:TX", "", [] ],
-    [ "pot1:SIG", "esp:4", "green", [ "v0" ] ],
-    [ "pot1:VCC", "esp:3V3", "red", [ "v0" ] ],
-    [ "pot1:GND", "esp:GND.1", "black", [ "v0" ] ],
-    [ "temp1:DQ", "esp:15", "yellow", [ "v0" ] ],
-    [ "temp1:VDD", "esp:3V3", "red", [ "v0" ] ],
-    [ "temp1:GND", "esp:GND.1", "black", [ "v0" ] ],
-    [ "led1:A", "esp:16", "purple", [ "v0" ] ],
-    [ "led1:C", "esp:GND.2", "black", [ "v0" ] ],
-    [ "relay1:IN", "esp:17", "blue", [ "v0" ] ],
-    [ "relay1:VCC", "esp:5V", "red", [ "v0" ] ],
-    [ "relay1:GND", "esp:GND.3", "black", [ "v0" ] ]
-  ]
+    [
+      "esp:TX",
+      "$serialMonitor:RX",
+      "",
+      []
+    ],
+    [
+      "esp:RX",
+      "$serialMonitor:TX",
+      "",
+      []
+    ],
+    [
+      "mq2:VCC",
+      "esp:3V3",
+      "red",
+      []
+    ],
+    [
+      "mq2:GND",
+      "esp:GND.1",
+      "black",
+      []
+    ],
+    [
+      "mq2:AOUT",
+      "esp:34",
+      "green",
+      []
+    ],
+    [
+      "temp1:DQ",
+      "esp:15",
+      "yellow",
+      []
+    ],
+    [
+      "temp1:VDD",
+      "esp:3V3",
+      "red",
+      []
+    ],
+    [
+      "temp1:GND",
+      "esp:GND.1",
+      "black",
+      []
+    ],
+    [
+      "rpull:1",
+      "esp:15",
+      "yellow",
+      []
+    ],
+    [
+      "rpull:2",
+      "esp:3V3",
+      "red",
+      []
+    ],
+    [
+      "buzzer1:1",
+      "esp:GND.2",
+      "black",
+      []
+    ],
+    [
+      "buzzer1:2",
+      "esp:16",
+      "purple",
+      []
+    ],
+    [
+      "relay1:IN",
+      "esp:17",
+      "blue",
+      []
+    ],
+    [
+      "relay1:VCC",
+      "esp:5V",
+      "red",
+      []
+    ],
+    [
+      "relay1:GND",
+      "esp:GND.3",
+      "black",
+      []
+    ]
+  ],
+  "serialMonitor": {
+    "display": "auto",
+    "newline": "lf"
+  },
+  "dependencies": {}
 }
