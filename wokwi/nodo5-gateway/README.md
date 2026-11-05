@@ -7,11 +7,11 @@ Responsable: Eduardo. Este firmware integra el contrato real de las ramas fusion
 - Suscripción MQTT a upc/g1/+/datos, upc/g1/nodo4/alerta y upc/g1/seguridad/eventos.
 - Verificación por nodo de HMAC-SHA256 y secuencia estrictamente creciente antes de usar lecturas. Material: id|ts_millis|seq|sensor|valor(2 decimales)|unidad|calidad.
 - Verifica identificador, unidad, sensor, rango y calidad. Persiste el máximo seq por nodo en NVS. Los estados sin firma nunca autorizan actuaciones.
-- Promedio móvil de tres muestras por sensor. Si un sensor no actualiza en 12 s, no puede permitir orden OFF.
-- Dos fuentes independientes elevadas activan lavador: N1 gas ADC >=3820; N2 gas relativo >=60% ADC; N3 gas MQ-2 simulado >=1000 ppm o riesgo nivel 2. NO se convierten estas unidades entre sí.
+- Promedio móvil de tres muestras por sensor. Si un sensor esencial (incluidas las temperaturas de N1 y N2) no actualiza en 12 s, no puede permitir orden OFF. Un dato firmado con calidad inválida descarta las muestras antiguas de ese sensor.
+- Dos fuentes independientes elevadas activan lavador: N1 gas ADC >=3820 o temperatura >=45 C; N2 gas relativo >=60% ADC o temperatura >=50 C; N3 gas MQ-2 simulado >=1000 ppm o riesgo nivel 2. NO se convierten estas unidades entre sí.
 - Si dos fuentes están elevadas y el viento de Gonzalo apunta al Este (45 a 135 grados), el estado es CRITICO. Una fuente elevada o datos faltantes dan ALERTA. Solo la situación completamente segura permite apagar.
 - Comandos D5 con HMAC-SHA256 y contador monotónico persistido: D5|ts_unix_segundos|seq|cmd|valor. Los envía a N4 (HB, RIESGO_ON, MAX, ON, RIESGO_OFF, OFF), N3 (HB con valor 1), y N1 (VENT_MAX/VENT_AUTO).
-- Detecta confirmación real de N4 (sensor confirmado desde el switch) y EVENTO FALLA_LAVADOR firmado por N4. Si no se confirma en 10 segundos después de ON, firma VENT_MAX a N1.
+- Detecta confirmación real de N4 (sensor confirmado desde el switch) y EVENTO FALLA_LAVADOR firmado por N4. Si no se confirma en 10 segundos después de ON, o si D4 enciende preventivamente sin confirmación durante 10 s, firma VENT_MAX a N1.
 - VENT_MAX queda enclavado incluso tras reinicio del Gateway. Para levantarlo, presionar el botón durante 2,5 segundos y demostrar riesgo normal con fuentes frescas más confirmación física de N4. Pulsación breve solo reconoce.
 - ThingSpeak opcional por HTTPS CA validada y Write API Key privada, a un intervalo de 20 s. No sustituye datos ausentes con ceros. Sin CA y clave no se conecta, y MQTT sigue funcionando.
 
