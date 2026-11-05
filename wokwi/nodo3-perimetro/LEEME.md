@@ -22,7 +22,7 @@
 4. Dale Play. Cada 2 s verás una línea así: `gas=400 ppm [ADC 3628] (ok) viento=… riesgo=…`
 5. Prueba en este orden:
    - Deslizador del MQ-2 en 400 ppm → riesgo **BAJO**, LED apagado.
-   - Sube a unos 2 000 ppm → riesgo **MEDIO**, LED parpadea.
+   - Sube a unos 2 000 ppm con el viento **lejos de la comunidad** → riesgo **MEDIO**, LED parpadea. Sin heartbeat HMAC del gateway, el mismo nivel con viento hacia la comunidad será **ALTO** preventivo.
    - Sube a 10 000 ppm o más y gira la perilla hasta `viento≈90° HACIA comunidad` → riesgo **ALTO**, LED fijo.
    - Con 10 000 ppm, gira el viento a otro lado → vuelve a **MEDIO**.
 
