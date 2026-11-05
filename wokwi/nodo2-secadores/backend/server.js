@@ -5,6 +5,7 @@ const path=require('node:path');
 const crypto=require('node:crypto');
 const {MiniMqtt}=require('./lib/mqtt-mini');
 const {createVerifier,sign}=require('./lib/protocol');
+const {createGroupVerifier}=require('./lib/group-protocol');
 
 function loadEnv(file){
   if(!fs.existsSync(file))return;
@@ -14,10 +15,14 @@ function loadEnv(file){
   }
 }
 loadEnv(path.join(__dirname,'.env'));
-const SECRET=process.env.HMAC_KEY || 'CAMBIAR_POR_CLAVE_DE_PRUEBA_COMPARTIDA_202620';
+const DEMO=process.env.DEMO_MODE==='1';
+const TEST_KEY='CAMBIAR_POR_CLAVE_DE_PRUEBA_COMPARTIDA_202620';
+const SECRET=process.env.HMAC_KEY || (DEMO ? TEST_KEY : '');
+if(!DEMO && (!SECRET || SECRET===TEST_KEY || SECRET.length<24 || SECRET.startsWith('REEMPLAZAR_'))) {
+  throw new Error('Configura HMAC_KEY privada de laboratorio en backend/.env para modo MQTT real');
+}
 const ROOT=process.env.MQTT_ROOT || 'upc/g1/nodo2';
 const PORT=Number(process.env.PORT||8080);
-const DEMO=process.env.DEMO_MODE==='1';
 const ENABLE_GROUP_ATTACKS=process.env.ENABLE_GROUP_ATTACKS==='1';
 const ENABLE_GROUP_FEED=process.env.ENABLE_GROUP_FEED==='1';
 const GROUP_ATTACK_TOPIC='upc/g1/sim/ataque';
@@ -25,6 +30,7 @@ const GROUP_SECURITY_TOPIC='upc/g1/seguridad/eventos';
 const VERIFIED_TOPIC=ROOT+'/validado';
 let lastAttackMs=0;
 const verify=createVerifier(SECRET);
+const verifyGroup=createGroupVerifier(SECRET);
 const history=[];
 const security=[];
 const subscribers=new Set();
@@ -47,8 +53,8 @@ function acceptMessage(payload,topic){
   const verdict=verify(payload);
   if(!verdict.ok){securityEvent('SUPLANTACION_O_MENSAJE_INVALIDO','RECHAZADO',verdict.reason);return verdict;}
   const m=verdict.message;
-  last={...m,recibido:new Date().toISOString(),origen:DEMO?'SINTETICO_DEMO':'MQTT_FIRMADO',tipo:topic.endsWith('/alerta')?'alerta':'datos'};
-  if(topic.endsWith('/datos')){
+  last={...m,recibido:new Date().toISOString(),origen:DEMO?'SINTETICO_DEMO':'MQTT_FIRMADO',tipo:'datos'};
+  if(topic.endsWith('/paquete')){
     history.push(last);if(history.length>6000)history.shift();
     if(ENABLE_GROUP_FEED && !DEMO && mqtt.connected){
       // Estos eventos vienen de un verificador local, PERO el broker público no impide suplantar este tópico.
@@ -69,7 +75,7 @@ const mqtt=new MiniMqtt({
   host:process.env.MQTT_BROKER||'broker.hivemq.com',
   port:Number(process.env.MQTT_PORT||1883),
   clientId:'g1-nodo2-verifier-'+crypto.randomBytes(4).toString('hex'),
-  topics:[ROOT+'/datos', ROOT+'/alerta',ROOT+'/estado', ...(ENABLE_GROUP_ATTACKS?[GROUP_ATTACK_TOPIC]:[])]
+  topics:[ROOT+'/datos', ROOT+'/alerta',ROOT+'/paquete',ROOT+'/estado', ...(ENABLE_GROUP_ATTACKS?[GROUP_ATTACK_TOPIC]:[])]
 });
 mqtt.on('connection',yes=>{brokerOnline=yes;broadcast('network',{brokerOnline,mode:DEMO?'DEMO':'MQTT'});});
 mqtt.on('notice',m=>console.log('[Broker]',m));
@@ -86,9 +92,15 @@ mqtt.on('message',(topic,payload)=>{
   }
   if(topic===ROOT+'/estado'){
     // Estado sin firma: informativo, NO se usa para autorizar datos o actuación.
-    broadcast('device',{estado:payload,autenticado:false});return;
+    let estado=payload;try{estado=JSON.parse(payload).estado||payload;}catch{}
+    broadcast('device',{estado,autenticado:false});return;
   }
-  if(topic===ROOT+'/datos'||topic===ROOT+'/alerta')acceptMessage(payload,topic);
+  if(topic===ROOT+'/datos'||topic===ROOT+'/alerta') {
+    const verdict=verifyGroup(payload);
+    if(!verdict.ok)securityEvent('SUPLANTACION_O_MENSAJE_INVALIDO','RECHAZADO',verdict.reason);
+    return; // /paquete contiene datos agrupados para el panel individual
+  }
+  if(topic===ROOT+'/paquete')acceptMessage(payload,topic);
 });
 
 let simTimer=null, demoSeq=0, demoTemp=29, demoGas=18;
@@ -110,9 +122,9 @@ function simulateAttack(){
   const fake={...newDemoPayload(),gas:99.0,gas_raw:4054,estado:'ALERTA',firma:'0'.repeat(64)};
   // Conserva id='nodo2' y falsifica la lectura sin la clave; pasa por MQTT en modo real.
   // En demo offline atraviesa el mismo verificador, SIN publicar a terceros.
-  if(DEMO){acceptMessage(JSON.stringify(fake),ROOT+'/datos');return {published:false,simulatedLocally:true};}
+  if(DEMO){acceptMessage(JSON.stringify(fake),ROOT+'/paquete');return {published:false,simulatedLocally:true};}
   if(!mqtt.connected)return {error:'BROKER_DESCONECTADO'};
-  mqtt.publish(ROOT+'/datos',JSON.stringify(fake));
+  mqtt.publish(ROOT+'/paquete',JSON.stringify(fake));
   return {published:true,simulatedLocally:false};
 }
 function json(res,data,status=200){
@@ -157,7 +169,7 @@ if(require.main===module){
     console.log(`Panel Nodo 2 en http://127.0.0.1:${PORT}/ - MODO ${DEMO?'DEMO (sintético)':'MQTT en vivo'}`);
   });
   if(!DEMO)mqtt.start();
-  else {simTimer=setInterval(()=>acceptMessage(newDemoPayload(),ROOT+'/datos'),2000);}
+  else {simTimer=setInterval(()=>acceptMessage(newDemoPayload(),ROOT+'/paquete'),2000);}
 }
 function shutdown(){if(simTimer)clearInterval(simTimer);mqtt.stop();server.close();}
 module.exports={server,shutdown,acceptMessage,simulateAttack,newDemoPayload};
