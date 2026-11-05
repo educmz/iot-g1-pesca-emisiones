@@ -1,0 +1,11 @@
+{
+  "name": "g1-pesca-nodo2-secadores",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Verificador HMAC MQTT + panel Secadores - G1 Pesca UPC",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test tests/*.test.js"
+  },
+  "engines": {"node": ">=18"}
+}

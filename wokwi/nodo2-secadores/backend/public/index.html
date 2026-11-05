@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>G1 Pesca | Nodo 2 - Secadores</title>
+  <style>
+    :root{color-scheme:dark;--bg:#07141d;--card:#0d2430;--edge:#245060;--ink:#edf7fc;--muted:#9eb8c6;--teal:#41dbc1;--warn:#efbd57;--err:#fa777a}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 80% 0,#103e4b,transparent 38%),var(--bg);font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;color:var(--ink)}
+    header{border-bottom:1px solid var(--edge);background:#091d29c9;backdrop-filter:blur(10px)}.wrap{max-width:1160px;margin:auto;padding:22px 24px}
+    .top{display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap}.eyebrow{text-transform:uppercase;letter-spacing:.19em;color:var(--teal);font-size:11px;font-weight:700}
+    h1{font-size:clamp(25px,4vw,37px);letter-spacing:-.03em;margin:4px 0 3px}h2{font-size:18px;margin:0 0 12px}p{margin:0;color:var(--muted)}
+    .chip{border:1px solid var(--edge);border-radius:30px;padding:6px 12px;color:var(--muted);font-weight:700;font-size:12px}.chip.ok{color:var(--teal);border-color:#378975}.chip.bad{color:var(--err);border-color:#905059}
+    nav{display:flex;flex-wrap:wrap;gap:10px;margin:24px 0}.tab{border:1px solid var(--edge);color:var(--muted);padding:9px 17px;border-radius:10px;background:#0b2631;cursor:pointer;font-weight:700}.tab[aria-selected=true]{background:var(--teal);color:#06242a}
+    section[hidden]{display:none}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.card{background:linear-gradient(150deg,#11303c,#0b212c);border:1px solid var(--edge);border-radius:15px;padding:18px;min-width:0}.metric{font-size:clamp(26px,4vw,42px);font-variant-numeric:tabular-nums;font-weight:700;letter-spacing:-.04em;margin:10px 0 5px}.subtle{font-size:12px;color:var(--muted)}.label{color:#b9d0db;font-size:12px;letter-spacing:.07em;text-transform:uppercase;font-weight:700}
+    .span3{grid-column:span 3}.span2{grid-column:span 2}.wide{grid-column:1/-1}.row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.grow{flex:1}.light{width:17px;height:17px;border-radius:50%;background:#647582;box-shadow:0 0 0 5px #ffffff13}.light.normal{background:#41df8c;box-shadow:0 0 20px #41df8c55}.light.advertencia{background:#efbd57;box-shadow:0 0 20px #efbd5755}.light.alerta,.light.falla_sensor{background:#fa777a;box-shadow:0 0 20px #fa777a55}
+    button.action{background:#dc747d;color:#1e0c11;border:0;border-radius:10px;font-weight:800;font-size:15px;padding:12px 18px;cursor:pointer}button.action:disabled{opacity:.6;cursor:wait}a{color:var(--teal)}.help{font-size:13px;margin-top:10px;color:var(--muted)}
+    .graph{width:100%;height:170px;border-radius:10px;background:linear-gradient(#17404b44 1px,transparent 1px) 0 0/100% 25%}.tablewrap{overflow:auto;max-height:380px}table{border-collapse:collapse;width:100%;font-size:13px}th,td{padding:11px;border-bottom:1px solid var(--edge);text-align:left;white-space:nowrap}th{color:var(--muted);position:sticky;top:0;background:#0d2430}.err{color:var(--err);font-weight:700}.oktxt{color:var(--teal);font-weight:700}code{font-family:ui-monospace,Menlo,monospace;word-break:break-word;color:#a7ffeb}
+    .kpis{display:flex;flex-wrap:wrap;gap:18px;color:var(--muted);font-size:12px;margin-top:9px}footer{padding:28px 0 40px;color:var(--muted);font-size:12px}.small-list{padding-left:18px;color:var(--muted)}.small-list li{margin-bottom:9px}
+    @media(max-width:850px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.span3{grid-column:span 2}}
+    @media(max-width:520px){.wrap{padding:17px 14px}.grid{grid-template-columns:1fr}.span2,.span3,.wide{grid-column:1}.metric{font-size:35px}}
+  </style>
+</head>
+<body>
+<header><div class="wrap top"><div><div class="eyebrow">G1 · Pesca · IoT industrial</div><h1>Nodo 2 · Secadores</h1><p>Lecturas firmadas, semáforo local y ciberseguridad de demostración</p></div><div class="row"><span id="mode" class="chip">INICIANDO</span><span id="connection" class="chip">BROKER: ...</span></div></div></header>
+<main class="wrap">
+  <nav aria-label="Secciones"><button class="tab" data-tab="operacion" aria-selected="true">Operación en vivo</button><button class="tab" data-tab="seguridad" aria-selected="false">Ciberseguridad</button><button class="tab" data-tab="integracion" aria-selected="false">Integración</button></nav>
+  <section id="operacion"><div class="grid">
+    <article class="card"><div class="label">Temperatura</div><div class="metric"><span id="temp">--</span> <small>°C</small></div><div class="subtle">DHT22 · digital</div></article>
+    <article class="card"><div class="label">Humedad</div><div class="metric"><span id="hum">--</span><small> %</small></div><div class="subtle">DHT22 · digital</div></article>
+    <article class="card"><div class="label">Gas relativo</div><div class="metric"><span id="gas">--</span><small> %</small></div><div class="subtle">MQ-2 · ADC / 4095 · NO ppm</div><div id="calidad" class="subtle" style="margin-top:6px">Calidad: --</div></article>
+    <article class="card"><div class="label">LED RGB (edge)</div><div class="row" style="margin-top:19px"><span id="light" class="light"></span><strong id="status">SIN DATOS</strong></div><div class="subtle" style="margin-top:11px">Acción local, independiente de MQTT</div></article>
+    <article class="card span3"><div class="row"><h2 class="grow">Historial de gas relativo</h2><span class="chip">Últimas 60 lecturas</span></div><svg id="chart" class="graph" viewBox="0 0 700 170" preserveAspectRatio="none" role="img" aria-label="Gráfica del índice relativo de gas"><line x1="0" y1="68" x2="700" y2="68" stroke="#dfad58" stroke-width="1" stroke-dasharray="7 8" opacity=".7"/><line x1="0" y1="119" x2="700" y2="119" stroke="#dfad58" stroke-width="1" stroke-dasharray="7 8" opacity=".55"/><polyline id="trend" fill="none" stroke="#41dbc1" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points=""/></svg><div class="kpis"><span>Warn ≥30 %</span><span>Alerta ≥60 %</span><span>Temperatura warn ≥40 °C, alerta ≥50 °C</span></div></article>
+    <article class="card"><div class="label">Último dato válido</div><div id="lasttime" style="font-weight:700;font-size:18px;margin:10px 0">--</div><div class="subtle">Hora de recepción en el backend</div><div class="subtle" id="sequence" style="margin-top:12px">seq --</div></article>
+    <article class="card wide"><div class="row"><div class="grow"><h2>Descarga de datos propios</h2><p>Exporta las lecturas recibidas y verificadas para comparar alternativas A y B, y entrenar la C opcional.</p></div><a href="/api/export.csv" download>Exportar CSV verificado</a></div></article>
+  </div></section>
+  <section id="seguridad" hidden><div class="grid">
+    <article class="card span2"><h2>Ataque de suplantación</h2><p>Publicar un mensaje con <code>id=nodo2</code>, gas falsificado y una firma HMAC incorrecta. El verificador debe rechazarlo sin alterar el panel.</p><div style="margin-top:20px"><button id="attack" class="action" type="button">Simular suplantación</button></div><div id="attack-result" role="status" class="help" aria-live="polite">Solo para el entorno de laboratorio.</div></article>
+    <article class="card span2"><h2>Control defensivo</h2><ul class="small-list"><li>HMAC-SHA256 validado en el receptor</li><li>Secuencia creciente por arranque: rechaza replay</li><li>Ventana temporal: rechaza mensajes viejos</li><li>El LED RGB no depende de mensajes MQTT</li></ul></article>
+    <article class="card wide"><div class="row"><h2 class="grow">Registro de seguridad</h2><span class="chip" id="events-count">0 eventos</span></div><div class="tablewrap"><table><thead><tr><th>Hora</th><th>Nodo</th><th>Ataque</th><th>Acción</th><th>Motivo</th></tr></thead><tbody id="events-body"><tr><td colspan="5">Todavía no se registran eventos.</td></tr></tbody></table></div></article>
+  </div></section>
+  <section id="integracion" hidden><article class="card"><h2>Contrato MQTT del Nodo 2</h2><p>Todos los temas deben coordinarse con el integrante 5 (gateway/integrador).</p><ul class="small-list"><li><code>upc/g1/nodo2/datos</code> · telemetría firmada cada 2 s</li><li><code>upc/g1/nodo2/alerta</code> · alerta firmada al cambiar a estado no normal</li><li><code>upc/g1/nodo2/estado</code> · latido online cada 30 s + último deseo offline</li><li><code>upc/g1/nodo2/cmd</code> · reservado; este nodo no acepta comandos remotos</li></ul><p>El dashboard no contiene la clave HMAC. Se comunica con el backend local mediante Server-Sent Events, que solo muestra datos aceptados por el verificador.</p><p style="margin-top:14px">En <strong>modo DEMO</strong> los valores son sintéticos. En <strong>modo MQTT</strong>, provienen del ESP32 de Wokwi si está conectado y su firma es válida.</p></article></section>
+  <footer>Simulación académica, no sistema industrial certificado. El MQ-2 no distingue ni mide directamente H₂S/NH₃ en ppm calibradas. Los umbrales son demostrativos.</footer>
+</main>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const points=[];
+const logs=[];
+function setText(id,value){$(id).textContent=String(value);}
+function safeTime(iso){try{return new Date(iso).toLocaleTimeString('es-PE',{hour12:false});}catch{return '--';}}
+function renderTrend(){const subset=points.slice(-60);const n=subset.length;const coords=subset.map((v,i)=>`${n===1?350:(i*700/(n-1)).toFixed(1)},${(166-v*1.58).toFixed(1)}`);$('trend').setAttribute('points',coords.join(' '));}
+function telemetry(m){
+  setText('temp',m.calidad!=='SENSOR_ERROR'?Number(m.temperatura).toFixed(1):'ERROR');
+  setText('hum',m.calidad!=='SENSOR_ERROR'?Number(m.humedad).toFixed(1):'ERROR');
+  setText('gas',Number(m.gas).toFixed(1));
+  setText('calidad',m.calidad==='PRUEBA_INYECTADA'?'CALIDAD: PRUEBA INYECTADA (no lectura física)':`CALIDAD: ${m.calidad}`);
+  setText('status',m.estado.replace('_',' '));
+  $('light').className='light '+m.estado.toLowerCase();
+  setText('lasttime',safeTime(m.recibido));setText('sequence',`boot ${m.boot} · seq ${m.seq}`);
+  if(m.tipo==='datos'){points.push(Number(m.gas));if(points.length>150)points.shift();renderTrend();}
+}
+function renderSecurity(){
+  setText('events-count',logs.length+' eventos');
+  const tb=$('events-body');tb.replaceChildren();
+  if(!logs.length){const tr=tb.insertRow();const td=tr.insertCell();td.colSpan=5;td.textContent='Todavía no se registran eventos.';return;}
+  for(const item of logs.slice(0,70)){
+    const tr=tb.insertRow();for(const val of [safeTime(item.hora),item.nodo,item.tipo,item.accion,item.motivo]){const td=tr.insertCell();td.textContent=val;if(val==='RECHAZADO')td.className='err';}
+  }
+}
+function updateNetwork(x){
+  setText('mode',x.mode==='DEMO'?'DEMO · SINTÉTICO':'MQTT · REAL');
+  $('mode').className='chip '+(x.mode==='DEMO'?'':'ok');
+  setText('connection',x.brokerOnline?'BROKER CONECTADO':x.mode==='DEMO'?'SIN BROKER (DEMO)':'BROKER DESCONECTADO');
+  $('connection').className='chip '+(x.brokerOnline?'ok':'bad');
+}
+for(const button of document.querySelectorAll('.tab'))button.addEventListener('click',()=>{
+  for(const b of document.querySelectorAll('.tab')){const chosen=b===button;b.setAttribute('aria-selected',String(chosen));$(b.dataset.tab).hidden=!chosen;}
+});
+$('attack').addEventListener('click',async()=>{
+  $('attack').disabled=true;setText('attack-result','Enviando mensaje falsificado...');
+  try{const r=await fetch('/api/demo/attack',{method:'POST'});const d=await r.json();
+    setText('attack-result',!r.ok?'No se envió: '+(d.error||r.status):d.simulatedLocally?'Ataque inyectado localmente en el verificador de prueba. Revisa el registro.':'Ataque enviado por MQTT; revisa el registro de rechazo.');
+  }catch(e){setText('attack-result','No hay comunicación con el backend: '+e.message);}
+  finally{$('attack').disabled=false;}
+});
+fetch('/api/state').then(r=>r.json()).then(s=>{
+  updateNetwork(s);if(s.last)telemetry(s.last);for(const item of s.security||[])logs.push(item);renderSecurity();
+}).catch(()=>{setText('connection','BACKEND DESCONECTADO');$('connection').className='chip bad';});
+const stream=new EventSource('/api/events');
+stream.addEventListener('telemetry',e=>telemetry(JSON.parse(e.data)));
+stream.addEventListener('security',e=>{logs.unshift(JSON.parse(e.data));if(logs.length>200)logs.pop();renderSecurity();});
+stream.addEventListener('network',e=>{const n=JSON.parse(e.data);updateNetwork(n);});
+stream.onerror=()=>{setText('connection','RECONEXIÓN AL SERVIDOR...');$('connection').className='chip bad';};
+</script>
+</body></html>
