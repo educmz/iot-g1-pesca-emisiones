@@ -54,7 +54,7 @@ Al inicio verás `[modo seguro]` porque todavía no existe el gateway. Es lo cor
 | Gas ≥ 5 000 ppm **y** viento hacia la comunidad | ALTO | fijo |
 
 - **Histéresis del 10 %:** para bajar de nivel el gas debe caer un poco más, así el LED no titila en el límite.
-- **Modo seguro:** sin latido del gateway (`upc/g1/nodo5/estado`) por más de 60 s, el ALTO se activa con 1 000 ppm.
+- **Modo seguro:** sin latido **firmado** de D5 recibido por upc/g1/nodo3/cmd durante 60 s, el ALTO se activa con 1 000 ppm. El estado no firmado de nodo5/estado no desactiva esta protección.
 
 **Comunica, según el contrato del repo (`docs/contrato-mqtt`):**
 
@@ -78,7 +78,7 @@ Al inicio verás `[modo seguro]` porque todavía no existe el gateway. Es lo cor
 **Defensa del nodo:** escucha su propio tópico y revisa cada mensaje.
 1. **Firma:** si el HMAC no coincide, es una suplantación.
 2. **Coherencia:** si el mensaje dice menos de 1 000 ppm pero el MQ-2 real mide más, es un `aire_limpio_falso`. El motivo incluye el viento y lo que reportan pozas y secadores.
-3. **Repetición:** si la firma es válida pero el `seq` es viejo, alguien reenvió un mensaje real.
+3. **Repetición:** el eco de una publicación propia solo se consume una vez; un segundo envío idéntico y firmado, aunque sea reciente, es un replay.
 4. **Respuesta:** publica el evento en `upc/g1/seguridad/eventos` y republica en seguida las lecturas reales firmadas. El panel descarta el valor falso.
 
 **Para el gateway (Eduardo):** verificar la misma firma con la clave del nodo 3. Si el perímetro dice "limpio" pero pozas o secadores están altos y el viento va hacia la comunidad, no bajar el riesgo.
@@ -98,3 +98,8 @@ Al inicio verás `[modo seguro]` porque todavía no existe el gateway. Es lo cor
 - **¿Por qué el LED se decide en el nodo?** El requerimiento pide funcionar sin internet; el nodo actúa en menos de 1 s aunque se caiga la red.
 - **¿Corrosión salina?** En una instalación real: caja IP65, conectores sellados y placa con barniz protector.
 - **Cambiar un parámetro:** todos están al inicio de `sketch.ino` (`UMBRAL_ALERTA`, `UMBRAL_CRITICO`, `DIR_COMUNIDAD`, `TOLERANCIA_DIR`, `PERIODO_PUBLICAR`).
+
+
+## Nota de revisión 2026
+
+El modo normal requiere heartbeat de D5 firmado HMAC sobre D5|ts|seq|HB|1, recibido en upc/g1/nodo3/cmd. Hasta que Eduardo integre ese heartbeat, el Nodo 3 estará siempre en modo seguro y no debe interpretarse como fallo de la conexión MQTT. El LED entra en riesgo ALTO preventivo si el gas tiene calidad inválida. Las evidencias antiguas no prueban estas correcciones. Repetir Wokwi y renovar capturas. Para MQ-2 físico, adaptar la señal de salida del módulo de 5 V al ADC de 3,3 V del ESP32 usando un divisor (10 kΩ / 15 kΩ) y verificarlo en Cirkit.

@@ -121,7 +121,7 @@ function aplicar(m) {
   if (m.sensor === 'gas') {
     $('gas').textContent = Math.round(m.valor);
     $('cal').textContent = m.calidad;
-    $('verif').textContent = 'seq ' + m.seq + ' · firmado por el nodo';
+    $('verif').textContent = 'seq ' + m.seq + ' · firma presente (sin verificación en navegador)';
   } else if (m.sensor === 'viento') {
     const g = Math.round(m.valor), d = Math.abs(g - 90) % 360, dif = d > 180 ? 360 - d : d;
     $('viento').textContent = g;
