@@ -12,7 +12,7 @@ Convertir el potenciómetro a dirección de viento simulada y enviarla al gatewa
 Mensaje falso «aire limpio»; rechazar por firma y coherencia con pozas/secadores/viento.
 
 ## Registro de entrega
-- **Enlace Wokwi:** https://wokwi.com/projects/479699850241480705
+- **Enlace Wokwi:** https://wokwi.com/projects/479866498817689601
 - **Enlace Cirkit (sección de nodo):** https://app.cirkitdesigner.com/project/37ff5f4e-1d1d-4788-b2f4-8eea0eca768c
 - **Publicación MQTT:** upc/g1/nodo3/datos (gas, viento, riesgo), alerta, estado; eventos en upc/g1/seguridad/eventos
 - **Actuación comprobada:** LED fijo con gas ≥ 5000 ppm simulados y viento 45–135° (ver evidencias/02-riesgo-alto.png)

@@ -136,7 +136,7 @@ Las capturas y registros correspondientes deben conservarse como evidencia.
 
 Wokwi se utiliza para ejecutar el firmware funcional del Nodo 4 y realizar las pruebas de comunicación, actuación y seguridad.
 
-**Enlace al proyecto Wokwi:** [https://wokwi.com/projects/479710105894416385](https://wokwi.com/projects/479710105894416385)
+**Enlace al proyecto Wokwi:** [https://wokwi.com/projects/479867720782481409](https://wokwi.com/projects/479867720782481409)
 
 Archivos principales:
 

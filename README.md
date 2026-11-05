@@ -30,12 +30,12 @@ Laboratorio universitario para **Pesquera Costa Norte S.A.C. (caso ficticio)**: 
 - [Guía de integración](docs/integracion.md)
 - [Colaboración y Pull Requests](CONTRIBUTING.md)
 
-## Enlaces activos de simulación y nube
+## Enlaces Wokwi actuales informados por el equipo (05/11/2026) y servicios en la nube
 
-- N1 Fernando: https://wokwi.com/projects/479819491217347585
-- N2 Fabricio: https://wokwi.com/projects/479809534640024577
-- N3 Gonzalo: https://wokwi.com/projects/479699850241480705
-- N4 Pedro: https://wokwi.com/projects/479710105894416385
+- N1 Fernando: https://wokwi.com/projects/479864540006804481
+- N2 Fabricio: https://wokwi.com/projects/479864093839705089
+- N3 Gonzalo: https://wokwi.com/projects/479866498817689601
+- N4 Pedro: https://wokwi.com/projects/479867720782481409
 - N5 Eduardo: https://wokwi.com/projects/479700208383720449
 - [Dashboard en GitHub Pages](https://educmz.github.io/iot-g1-pesca-emisiones/); [canal ThingSpeak 3567916 (privado)](https://thingspeak.com/channels/3567916).
 - Broker **de laboratorio**: `broker.emqx.io:1883`, dashboard WebSocket `wss://broker.emqx.io:8084/mqtt`. El broker no tiene garantía de disponibilidad; cada Wokwi requiere configurar su archivo local y todas las instancias deben usar el mismo host y puerto.
