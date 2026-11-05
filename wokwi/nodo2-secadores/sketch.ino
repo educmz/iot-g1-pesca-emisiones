@@ -11,6 +11,36 @@
 #include <time.h>
 #include <ArduinoJson.h>
 #include "config.h"
+// BEGIN PERSISTENT TELEMETRY SEQUENCE
+// Reserve BEFORE use; a reboot burns the unused tail. Never wrap or fall back
+// to a RAM-only counter. Erased NVS requires explicit secure reprovisioning.
+#include <Preferences.h>
+class TelemetrySequence {
+  Preferences storage;
+  uint32_t current=0, ceiling=0;
+  bool initialized=false, healthy=false;
+public:
+  uint32_t next() {
+    if(!initialized) {
+      initialized=true;
+      healthy=storage.begin("g1txseq",false);
+      if(!healthy)return 0;
+      current=ceiling=storage.getUInt("reserved",0);
+    }
+    if(!healthy)return 0;
+    if(current==ceiling) {
+      if(ceiling>UINT32_MAX-256U) {healthy=false;return 0;}
+      uint32_t reserved=ceiling+256U;
+      if(storage.putUInt("reserved",reserved)!=sizeof(uint32_t)) {
+        healthy=false;return 0;
+      }
+      ceiling=reserved;
+    }
+    return ++current;
+  }
+};
+TelemetrySequence telemetrySequence;
+// END PERSISTENT TELEMETRY SEQUENCE
 
 constexpr int PIN_DHT = 15, PIN_GAS = 34;
 constexpr int PIN_R = 25, PIN_G = 26, PIN_B = 27;
@@ -100,9 +130,9 @@ void publicarEstado() {
 void ensureNetwork() {
   unsigned long now = millis();
   if (WiFi.status() != WL_CONNECTED) {
-    if (now - lastWifiTry >= RETRY_MS || lastWifiTry == 0) {
+    if (now - lastWifiTry >= 45000UL) {
       lastWifiTry = now;
-      WiFi.begin("Wokwi-GUEST", "", 6);
+      if(WiFi.status()!=WL_IDLE_STATUS)WiFi.reconnect();
       Serial.println("[RED] Intentando conectar WiFi...");
     }
     return;
@@ -131,7 +161,9 @@ void publishPackage(const String& topic, float t, float h, int raw,
     return;
   }
   long ts = static_cast<long>(current);
-  uint32_t seq = ++seqNumber;
+  seqNumber=telemetrySequence.next();
+  if(!seqNumber)return;
+  uint32_t seq = seqNumber;
   String material = canonical(bootId, ts, seq, t, h, raw, gas, quality, status);
   String signature = hmacSha256(material);
   if (signature.length() != 64) return;
@@ -150,7 +182,9 @@ void publishPackage(const String& topic, float t, float h, int raw,
 void publicarSensor(const char* topic,const char* sensor,float valor,
                     const char* unidad,const String& calidad) {
   if(!mqtt.connected())return;
-  uint32_t ts=millis(),seq=++seqNumber;
+  seqNumber=telemetrySequence.next();
+  if(!seqNumber)return;
+  uint32_t ts=millis(),seq=seqNumber;
   String canon=String("nodo2|")+ts+"|"+seq+"|"+sensor+"|"+
                String(valor,2)+"|"+unidad+"|"+calidad;
   String firma=hmacSha256(canon);
@@ -191,8 +225,11 @@ void setup() {
     Serial.println("[SEGURIDAD] Configura HMAC_KEY privada en config.h");
   }
   WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);
+  WiFi.begin("Wokwi-GUEST", "", 6);
+  lastWifiTry=millis();
   mqtt.setServer(MQTT_BROKER, MQTT_PORT);
-  mqtt.setBufferSize(1024);
+  if(!mqtt.setBufferSize(1024))Serial.println("[MQTT] ERROR: no se pudo reservar buffer 1024");
   mqtt.setKeepAlive(30);
   configTime(0, 0, "pool.ntp.org", "time.google.com");
   Serial.println("Nodo 2 Secadores - accion EDGE y MQTT HMAC");

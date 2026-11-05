@@ -26,6 +26,36 @@
 #include <Preferences.h>
 #include "mbedtls/md.h"
 #include "secrets.h"     // WIFI_SSID, WIFI_PASSWORD, MQTT_HOST, MQTT_PORT, HMAC_KEY_NODO3 (NO se sube a GitHub)
+// BEGIN PERSISTENT TELEMETRY SEQUENCE
+// Reserve BEFORE use; a reboot burns the unused tail. Never wrap or fall back
+// to a RAM-only counter. Erased NVS requires explicit secure reprovisioning.
+#include <Preferences.h>
+class TelemetrySequence {
+  Preferences storage;
+  uint32_t current=0, ceiling=0;
+  bool initialized=false, healthy=false;
+public:
+  uint32_t next() {
+    if(!initialized) {
+      initialized=true;
+      healthy=storage.begin("g1txseq",false);
+      if(!healthy)return 0;
+      current=ceiling=storage.getUInt("reserved",0);
+    }
+    if(!healthy)return 0;
+    if(current==ceiling) {
+      if(ceiling>UINT32_MAX-256U) {healthy=false;return 0;}
+      uint32_t reserved=ceiling+256U;
+      if(storage.putUInt("reserved",reserved)!=sizeof(uint32_t)) {
+        healthy=false;return 0;
+      }
+      ceiling=reserved;
+    }
+    return ++current;
+  }
+};
+TelemetrySequence telemetrySequence;
+// END PERSISTENT TELEMETRY SEQUENCE
 
 // ---------------- Pines ----------------
 // GPIO34 y 35 son del ADC1: el ADC2 deja de funcionar cuando el Wi-Fi está activo.
@@ -87,6 +117,7 @@ uint8_t cursorEco = 0;
 unsigned long seq = 0;                 // contador de mensajes propios
 String pozasTxt = "sin dato", secadTxt = "sin dato";
 String mensajeViejo = "";              // guardado para simular el ataque de repetición
+unsigned long lastWifiAttempt=0;
 unsigned long tLectura = 0, tPublicar = 0, tLatido = 0, tReconexion = 0, tUltimoEvento = 0, tUltimoDesmentido = 0;
 
 // ================= Utilidades =================
@@ -214,7 +245,8 @@ bool consumirEco(unsigned long secuencia,const String& firma) {
 // ================= Publicar =================
 void publicarLectura(const char* sensor, float valor, const char* unidad, const char* cal) {
   if (!mqtt.connected()) return;
-  seq++;
+  seq=telemetrySequence.next();
+  if(!seq)return;
   unsigned long ts = millis();
   JsonDocument doc;
   doc["id"] = NODO_ID;  doc["ts"] = ts;  doc["seq"] = seq;  doc["sensor"] = sensor;
@@ -224,7 +256,8 @@ void publicarLectura(const char* sensor, float valor, const char* unidad, const 
   if (firma.length() != 64) return;
   doc["firma"] = firma;
   char out[320];
-  serializeJson(doc, out);
+  if(measureJson(doc)>=sizeof(out))return;
+  serializeJson(doc, out, sizeof(out));
   if (mqtt.publish(T_DATOS, out)) {
     guardarEco(seq, firma);
     if (mensajeViejo.length() == 0 && strcmp(sensor, "gas") == 0) mensajeViejo = out;
@@ -251,7 +284,8 @@ void publicarAlerta(const char* tipo, const String& motivo) {
   if (firma.length() != 64) return;
   doc["firma"] = firma;
   char out[512];
-  serializeJson(doc, out);
+  if(measureJson(doc)>=sizeof(out))return;
+  serializeJson(doc, out, sizeof(out));
   mqtt.publish(T_ALERTA, out);
 }
 
@@ -265,9 +299,22 @@ void publicarEventoSeguridad(const char* ataque, const String& accion, const Str
   doc["accion"] = accion;  doc["motivo"] = motivo;
   doc["seq_rechazado"] = seqRechazado;
   doc["firma_rechazada"] = firmaRechazada.substring(0, 16);
-  doc["ts"] = millis();
+  const time_t utc=time(nullptr);
+  if(utc<1700000000LL)return; // no trusted event without a synchronized clock
+  const uint32_t eventSeq=telemetrySequence.next();
+  if(!eventSeq)return;
+  doc["ts"]=(uint32_t)utc;
+  doc["seq"]=eventSeq;
+  doc["accion"]="RECHAZADO";
+  doc["schema"]="SEC1";
+  String material=String("SEC1|nodo3|")+(uint32_t)utc+"|"+eventSeq+"|"+
+      ataque+"|RECHAZADO|"+motivo;
+  String signature=hmacHex(material);
+  if(signature.length()!=64)return;
+  doc["firma"]=signature;
   char out[600];
-  serializeJson(doc, out);
+  if(measureJson(doc)>=sizeof(out))return;
+  serializeJson(doc, out, sizeof(out));
   mqtt.publish(T_SEG, out);
   mqtt.publish(T_ALERTA, out);
 }
@@ -278,7 +325,8 @@ void publicarEstado() {
   doc["id"] = NODO_ID;  doc["ts"] = millis();  doc["estado"] = "online";
   doc["modo_seguro"] = modoSeguro;  doc["rssi"] = WiFi.RSSI();
   char out[200];
-  serializeJson(doc, out);
+  if(measureJson(doc)>=sizeof(out))return;
+  serializeJson(doc, out, sizeof(out));
   mqtt.publish(T_ESTADO, out, true);          // retenido: reemplaza al LWT
 }
 
@@ -334,7 +382,8 @@ void simularAtaque(const char* tipo) {
     doc["valor"] = 0.0;  doc["unidad"] = "ppm";  doc["calidad"] = "ok";
     doc["firma"] = "0000000000000000000000000000000000000000000000000000000000000000";
     char out[320];
-    serializeJson(doc, out);
+    if(measureJson(doc)>=sizeof(out))return;
+  serializeJson(doc, out, sizeof(out));
     Serial.println("[SIM] Inyectando mensaje falso de aire limpio (sin firma válida)");
     mqtt.publish(T_DATOS, out);
   } else if (strcmp(tipo, "repeticion") == 0 && mensajeViejo.length()) {
@@ -413,7 +462,10 @@ void alRecibir(char* topic, byte* payload, unsigned int len) {
 void conectar() {
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("[WiFi] sin conexión, reintentando...");
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);   // no bloquea: el LED sigue funcionando sin red
+    if(millis()-lastWifiAttempt>=45000UL) {
+      lastWifiAttempt=millis();
+      if(WiFi.status()!=WL_IDLE_STATUS)WiFi.reconnect();
+    }   // no bloquea: el LED sigue funcionando sin red
     return;
   }
   if (mqtt.connected()) return;
@@ -442,11 +494,13 @@ void setup() {
   pinMode(PIN_LED, OUTPUT);
   analogReadResolution(12);
   WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  WiFi.setAutoReconnect(true);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD,6);
+  lastWifiAttempt=millis();
   configTime(-5 * 3600, 0, "pool.ntp.org");   // hora de Perú solo para mostrar en eventos
   mqtt.setServer(MQTT_HOST, MQTT_PORT);
   mqtt.setCallback(alRecibir);
-  mqtt.setBufferSize(1024);
+  if(!mqtt.setBufferSize(1024))Serial.println("[MQTT] ERROR: no se pudo reservar buffer 1024");
   mqtt.setKeepAlive(30);
   mqtt.setSocketTimeout(2);
   Serial.println("Nodo 3 Perímetro listo");
