@@ -4,64 +4,329 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>G1 Pesca | Dashboard IoT</title>
+  <meta name="description" content="Monitoreo de emisiones de una planta pesquera — Laboratorio de Soluciones IoT, grupo G1." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/style.css" />
   <script defer src="https://unpkg.com/mqtt@5/dist/mqtt.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script defer src="js/config.public.js"></script>
   <script defer src="js/app.js"></script>
 </head>
 <body>
-  <header class="header">
-    <div><div class="eyebrow">Laboratorio de Soluciones IoT · G1</div><h1>Monitoreo de emisiones · Planta pesquera</h1></div>
-    <div class="status" id="connectionStatus">MQTT: sin conexión</div>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" width="22" height="22"><path d="M4 22c4-6 8-6 12 0s8 6 12 0" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M9 14c0-3 2-5 4-5M15 12c0-4 3-7 6-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" opacity=".55"/></svg>
+        </div>
+        <div>
+          <div class="eyebrow">Laboratorio de Soluciones IoT · G1</div>
+          <h1>Monitoreo de emisiones · Planta pesquera</h1>
+        </div>
+      </div>
+      <div class="topbar-meta">
+        <div class="conn" id="connectionPill" data-state="off">
+          <span class="conn-dot" aria-hidden="true"></span>
+          <span id="connectionStatus">MQTT: sin conexión</span>
+        </div>
+        <div class="meta-chip" title="Mensajes recibidos en el último minuto"><span class="mono" id="msgRate">0</span> msg/min</div>
+        <button type="button" class="icon-btn" id="themeToggle" aria-label="Cambiar tema claro/oscuro" title="Cambiar tema">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z" fill="currentColor"/></svg>
+        </button>
+      </div>
+    </div>
+    <nav class="tabs" aria-label="Pestañas del proyecto" role="tablist">
+      <button type="button" class="tab active" role="tab" data-tab="problema"><span class="tab-n">1</span>Problema</button>
+      <button type="button" class="tab" role="tab" data-tab="solucion"><span class="tab-n">2</span>Solución</button>
+      <button type="button" class="tab" role="tab" data-tab="operacion"><span class="tab-n">3</span>Operación en vivo<span class="live-badge" id="liveBadge" hidden title="Recibiendo datos">en vivo</span></button>
+      <button type="button" class="tab" role="tab" data-tab="seguridad"><span class="tab-n">4</span>Ciberseguridad</button>
+      <button type="button" class="tab" role="tab" data-tab="resultados"><span class="tab-n">5</span>Resultados</button>
+    </nav>
   </header>
-  <nav class="tabs" aria-label="Pestañas del proyecto">
-    <button type="button" class="tab active" data-tab="problema">1. Problema</button>
-    <button type="button" class="tab" data-tab="solucion">2. Solución</button>
-    <button type="button" class="tab" data-tab="operacion">3. Operación en vivo</button>
-    <button type="button" class="tab" data-tab="seguridad">4. Ciberseguridad</button>
-    <button type="button" class="tab" data-tab="resultados">5. Resultados</button>
-  </nav>
+
   <main>
+    <!-- ============ 1. PROBLEMA ============ -->
     <section id="problema" class="panel active" aria-label="Problema">
-      <h2>Problema y pregunta de investigación</h2>
-      <p>Pesquera Costa Norte S.A.C. (ficticia), Chimbote: hasta 1 200 t/día, a 800 m de zona residencial. Emisiones de la descarga, pozas y secado; medición manual mensual, 14 quejas vecinales y 2 procesos de fiscalización en la última temporada.</p>
-      <p>Las causas incluyen espera prolongada de materia prima, lavadores manuales y ausencia de información del viento. Una paralización puede costar alrededor de USD 90 000/día, según el caso del laboratorio.</p>
-      <h3>Reto</h3>
-      <p>¿En qué capa (Edge o Fog) y con qué estrategia de detección conviene activar lavadores para responder rápido a picos sin falsas alarmas que interrumpan la operación?</p>
+      <div class="section-head">
+        <div>
+          <p class="kicker">Contexto del caso</p>
+          <h2>Problema y pregunta de investigación</h2>
+        </div>
+        <span class="tag">Pesquera Costa Norte S.A.C. · ficticia · Chimbote</span>
+      </div>
+
+      <div class="stats">
+        <div class="stat"><div class="stat-label">Capacidad de proceso</div><div class="stat-value">1 200<span class="stat-unit">t/día</span></div></div>
+        <div class="stat"><div class="stat-label">Distancia a zona residencial</div><div class="stat-value">800<span class="stat-unit">m</span></div></div>
+        <div class="stat"><div class="stat-label">Quejas vecinales (última temporada)</div><div class="stat-value">14</div></div>
+        <div class="stat"><div class="stat-label">Procesos de fiscalización</div><div class="stat-value">2</div></div>
+        <div class="stat stat-accent"><div class="stat-label">Costo estimado de una paralización</div><div class="stat-value">USD 90 000<span class="stat-unit">/día</span></div></div>
+      </div>
+
+      <div class="cols-2">
+        <article class="card">
+          <h3>Situación actual</h3>
+          <p>Planta de harina de pescado que procesa hasta 1 200 t/día a 800 m de una zona residencial. Las emisiones provienen de la descarga, las pozas y el secado; hoy se miden <strong>manualmente una vez al mes</strong>.</p>
+          <ul class="checklist">
+            <li><span class="dot dot-serious"></span>Espera prolongada de materia prima en pozas</li>
+            <li><span class="dot dot-serious"></span>Lavadores de gases activados manualmente</li>
+            <li><span class="dot dot-serious"></span>Sin información del viento hacia la comunidad</li>
+          </ul>
+        </article>
+        <article class="card card-highlight">
+          <p class="kicker">Reto</p>
+          <p class="question">¿En qué capa (<strong>Edge</strong> o <strong>Fog</strong>) y con qué estrategia de detección conviene activar lavadores para responder rápido a picos <strong>sin falsas alarmas</strong> que interrumpan la operación?</p>
+          <div class="pill-row">
+            <span class="pill">Respuesta local ≤ 2 s</span>
+            <span class="pill">Lavador ≤ 10 s</span>
+            <span class="pill">Heartbeat 30 s</span>
+            <span class="pill">ThingSpeak ≥ 15 s</span>
+          </div>
+        </article>
+      </div>
     </section>
+
+    <!-- ============ 2. SOLUCIÓN ============ -->
     <section id="solucion" class="panel" hidden aria-label="Solución">
-      <h2>Arquitectura en cinco capas</h2>
-      <p><strong>Device</strong> sensores y actuadores → <strong>Embedded</strong> ESP32 → <strong>Edge</strong> seguridad local → <strong>Fog</strong> gateway → <strong>Cloud</strong> ThingSpeak.</p>
+      <div class="section-head">
+        <div>
+          <p class="kicker">Diseño</p>
+          <h2>Arquitectura en cinco capas</h2>
+        </div>
+      </div>
+
+      <ol class="layers">
+        <li><span class="layer-n">01</span><strong>Device</strong><span>Sensores MQ-2, DS18B20, DHT22, potenciómetro, relés, motor, LEDs, TFT</span></li>
+        <li><span class="layer-n">02</span><strong>Embedded</strong><span>Firmware ESP32: leer, validar, temporizar y publicar</span></li>
+        <li><span class="layer-n">03</span><strong>Edge</strong><span>Alarmas y actuación local, modo seguro sin depender de la red</span></li>
+        <li><span class="layer-n">04</span><strong>Fog</strong><span>Gateway: regla de 2 sensores + viento, comandos firmados, confirmación</span></li>
+        <li><span class="layer-n">05</span><strong>Cloud</strong><span>ThingSpeak (historial) y este dashboard</span></li>
+      </ol>
+
       <div class="notice">Captura del diagrama general Cirkit: pendiente de adjuntar. Reemplazar este texto con la captura validada.</div>
-      <div class="grid" id="solutionNodes"></div>
+
+      <h3 class="sub">Nodos del sistema</h3>
+      <div class="node-grid" id="solutionNodes"></div>
+
+      <h3 class="sub">Reglas de detección y actuación</h3>
+      <div class="rules">
+        <div class="rule"><span class="rule-id">R1</span><div><strong>Edge primero</strong><p>Lectura crítica validada ⇒ alarma o ventilación local, sin depender de MQTT.</p></div></div>
+        <div class="rule"><span class="rule-id">R2</span><div><strong>Fog coordinado</strong><p>≥ 2 sensores elevados + viento hacia la comunidad ⇒ ordenar lavador.</p></div></div>
+        <div class="rule"><span class="rule-id">R3</span><div><strong>Lazo cerrado</strong><p>Confirmación del lavador en ≤ 10 s; si no llega, ventilación máxima en pozas.</p></div></div>
+        <div class="rule"><span class="rule-id">R4</span><div><strong>Modo seguro</strong><p>Más de 60 s sin gateway ⇒ el lavador se enciende por precaución.</p></div></div>
+        <div class="rule"><span class="rule-id">R5</span><div><strong>Visibilidad</strong><p>Medición, decisión, orden, actuación, confirmación y alertas en el dashboard.</p></div></div>
+        <div class="rule"><span class="rule-id">R6</span><div><strong>Seguridad</strong><p>Solo órdenes firmadas por el gateway con contador creciente (HMAC + anti-replay).</p></div></div>
+      </div>
     </section>
+
+    <!-- ============ 3. OPERACIÓN EN VIVO ============ -->
     <section id="operacion" class="panel" hidden aria-label="Operación en vivo">
-      <h2>Operación en vivo</h2>
-      <p class="muted">Lecturas procedentes de mensajes MQTT. «Sin datos» significa que todavía no se recibió telemetría.</p>
-      <div class="grid" id="liveNodes"></div>
-      <h3>Eventos de operación</h3>
-      <ol id="operationsLog" class="events"><li>Esperando mensajes MQTT de los nodos…</li></ol>
+      <div class="section-head">
+        <div>
+          <p class="kicker">Telemetría MQTT</p>
+          <h2>Operación en vivo</h2>
+          <p class="muted">Solo se muestran mensajes MQTT recibidos. «Sin datos» significa que todavía no llegó telemetría. El eje de tiempo usa la hora de recepción en este navegador.</p>
+        </div>
+        <div class="toolbar">
+          <div class="seg" role="group" aria-label="Ventana de tiempo" id="windowSeg">
+            <button type="button" data-win="60">1 min</button>
+            <button type="button" data-win="300" class="on">5 min</button>
+            <button type="button" data-win="900">15 min</button>
+          </div>
+          <button type="button" class="btn-ghost" id="exportCsv" title="Descargar los mensajes recibidos en esta sesión">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            CSV de la sesión
+          </button>
+        </div>
+      </div>
+
+      <!-- KPI row -->
+      <div class="kpis">
+        <article class="kpi kpi-risk" id="kpiFog" data-level="none">
+          <div class="kpi-label">Decisión Fog (Nodo 5)</div>
+          <div class="kpi-main"><span class="status-icon" aria-hidden="true"></span><span class="kpi-value" id="fogLevel">Sin datos</span></div>
+          <div class="kpi-foot" id="fogFoot">Esperando estado del gateway</div>
+        </article>
+        <article class="kpi">
+          <div class="kpi-label">Gas perímetro (N3) <span class="sim">simulado</span></div>
+          <div class="kpi-main"><span class="kpi-value mono" id="kpiN3Gas">—</span><span class="kpi-unit">ppm</span></div>
+          <div class="meter"><div class="meter-fill" id="n3Meter"></div><div class="meter-mark" style="left:50%" title="Umbral Fog 1 000 ppm"></div></div>
+          <div class="kpi-foot">Umbral Fog 1 000 ppm · escala logarítmica</div>
+        </article>
+        <article class="kpi kpi-wind">
+          <div class="kpi-label">Viento (N3)</div>
+          <div class="wind-wrap">
+            <svg class="compass" viewBox="0 0 100 100" aria-label="Dirección del viento" role="img">
+              <circle cx="50" cy="50" r="44" class="compass-ring"/>
+              <path id="communitySector" class="compass-sector" d=""/>
+              <text x="50" y="13" class="compass-t">N</text><text x="90" y="53" class="compass-t">E</text>
+              <text x="50" y="94" class="compass-t">S</text><text x="10" y="53" class="compass-t">O</text>
+              <g id="windArrow" style="transform-origin:50px 50px;transform:rotate(0deg)" opacity=".25">
+                <path d="M50 16 L56 34 L50 30 L44 34 Z" class="compass-arrow"/>
+                <line x1="50" y1="30" x2="50" y2="70" class="compass-shaft"/>
+              </g>
+              <circle cx="50" cy="50" r="3" class="compass-hub"/>
+            </svg>
+            <div>
+              <div class="kpi-value mono" id="kpiWind">—</div>
+              <div class="kpi-foot" id="kpiWindFoot">Comunidad al este (90° ± 45°)</div>
+            </div>
+          </div>
+        </article>
+        <article class="kpi" id="kpiWasher" data-on="none">
+          <div class="kpi-label">Lavador (N4)</div>
+          <div class="kpi-main"><span class="washer-ind" aria-hidden="true"></span><span class="kpi-value" id="kpiWasherVal">Sin datos</span></div>
+          <div class="kpi-foot" id="kpiWasherFoot">Confirmación: —</div>
+        </article>
+      </div>
+
+      <!-- Node presence strip -->
+      <div class="presence" id="presence"></div>
+
+      <!-- Charts -->
+      <div class="chart-grid">
+        <article class="chart-card span-2">
+          <header><div><h3>Gas por zona</h3><p>Cada nodo mide en su propia unidad simulada, por eso se grafican por separado.</p></div></header>
+          <div class="multiples">
+            <div class="mini">
+              <div class="mini-head"><span class="key" style="--c:var(--s1)"></span>N1 Pozas<span class="mono mini-val" id="lastN1Gas">—</span><span class="unit">ADC</span></div>
+              <div class="chart-box"><canvas id="chN1Gas"></canvas><div class="empty">Sin datos</div></div>
+            </div>
+            <div class="mini">
+              <div class="mini-head"><span class="key" style="--c:var(--s2)"></span>N2 Secadores<span class="mono mini-val" id="lastN2Gas">—</span><span class="unit">%</span></div>
+              <div class="chart-box"><canvas id="chN2Gas"></canvas><div class="empty">Sin datos</div></div>
+            </div>
+            <div class="mini">
+              <div class="mini-head"><span class="key" style="--c:var(--s3)"></span>N3 Perímetro<span class="mono mini-val" id="lastN3Gas">—</span><span class="unit">ppm</span></div>
+              <div class="chart-box"><canvas id="chN3Gas"></canvas><div class="empty">Sin datos</div></div>
+            </div>
+          </div>
+          <p class="chart-note"><span class="thr-key"></span>Línea discontinua = umbral usado por la regla Fog (N1 3 820 ADC · N2 60 % · N3 1 000 ppm).</p>
+        </article>
+
+        <article class="chart-card">
+          <header><div><h3>Temperatura</h3><p>Pozas (DS18B20) y secadores (DHT22), °C</p></div>
+            <div class="legend"><span><i style="--c:var(--s1)"></i>N1 Pozas</span><span><i style="--c:var(--s2)"></i>N2 Secadores</span></div></header>
+          <div class="chart-box tall"><canvas id="chTemp"></canvas><div class="empty">Sin datos</div></div>
+        </article>
+
+        <article class="chart-card">
+          <header><div><h3>Humedad en secadores</h3><p>N2 · DHT22, %</p></div></header>
+          <div class="chart-box tall"><canvas id="chHum"></canvas><div class="empty">Sin datos</div></div>
+        </article>
+
+        <article class="chart-card">
+          <header><div><h3>Nivel de riesgo</h3><p>0 normal · 1 alerta · 2 crítico</p></div>
+            <div class="legend"><span><i style="--c:var(--s1)"></i>Fog (N5)</span><span><i style="--c:var(--s3)"></i>Perímetro (N3)</span></div></header>
+          <div class="chart-box tall"><canvas id="chRisk"></canvas><div class="empty">Sin datos</div></div>
+        </article>
+
+        <article class="chart-card">
+          <header><div><h3>Actuadores</h3><p>Encendido (1) / apagado (0)</p></div>
+            <div class="legend"><span><i style="--c:var(--s1)"></i>Lavador N4</span><span><i style="--c:var(--s2)"></i>Confirmación N4</span><span><i style="--c:var(--s3)"></i>Ventilación N1</span></div></header>
+          <div class="chart-box tall"><canvas id="chAct"></canvas><div class="empty">Sin datos</div></div>
+        </article>
+      </div>
+
+      <div class="cols-2 bottom-row">
+        <article class="card">
+          <h3>Última lectura por nodo</h3>
+          <div class="node-grid compact" id="liveNodes"></div>
+        </article>
+        <article class="card">
+          <h3>Eventos de operación</h3>
+          <ol id="operationsLog" class="feed"><li class="feed-empty">Esperando mensajes MQTT de los nodos…</li></ol>
+        </article>
+      </div>
     </section>
+
+    <!-- ============ 4. CIBERSEGURIDAD ============ -->
     <section id="seguridad" class="panel" hidden aria-label="Ciberseguridad">
-      <h2>Panel de ataques simulados</h2>
-      <p class="muted">Pulsar un botón solicita una prueba. El rechazo debe ser reportado por el firmware y reflejado aquí; el navegador no lo inventa.</p>
-      <div class="grid attacks">
-        <button type="button" data-attack="lectura_imposible" data-target="nodo1">Nodo 1 · Lectura imposible</button>
-        <button type="button" data-attack="suplantacion" data-target="nodo2">Nodo 2 · Suplantación</button>
-        <button type="button" data-attack="aire_limpio_falso" data-target="nodo3">Nodo 3 · Aire limpio falso</button>
-        <button type="button" data-attack="apagado_falso" data-target="nodo4">Nodo 4 · Orden falsa/replay</button>
+      <div class="section-head">
+        <div>
+          <p class="kicker">Pruebas de ataque</p>
+          <h2>Panel de ataques simulados</h2>
+          <p class="muted">Pulsar un botón solicita una prueba. El rechazo debe ser reportado por el firmware y reflejado aquí; el navegador no lo inventa.</p>
+        </div>
+      </div>
+
+      <div class="kpis kpis-3">
+        <article class="kpi"><div class="kpi-label">Solicitudes enviadas (esta sesión)</div><div class="kpi-main"><span class="kpi-value mono" id="secSent">0</span></div></article>
+        <article class="kpi"><div class="kpi-label">Eventos de rechazo recibidos</div><div class="kpi-main"><span class="kpi-value mono" id="secRecv">0</span></div></article>
+        <article class="kpi"><div class="kpi-label">Protecciones</div><div class="kpi-main"><span class="kpi-value small">HMAC-SHA256 · anti-replay · coherencia física</span></div></article>
+      </div>
+
+      <div class="attacks">
+        <button type="button" data-attack="lectura_imposible" data-target="nodo1">
+          <span class="atk-node">Nodo 1 · Pozas</span><strong>Lectura imposible</strong><span class="atk-desc">Valor fuera del rango físico del sensor</span></button>
+        <button type="button" data-attack="suplantacion" data-target="nodo2">
+          <span class="atk-node">Nodo 2 · Secadores</span><strong>Suplantación</strong><span class="atk-desc">Mensaje con firma HMAC inválida</span></button>
+        <button type="button" data-attack="aire_limpio_falso" data-target="nodo3">
+          <span class="atk-node">Nodo 3 · Perímetro</span><strong>Aire limpio falso</strong><span class="atk-desc">0 ppm falsos mientras el MQ-2 mide gas</span></button>
+        <button type="button" data-attack="apagado_falso" data-target="nodo4">
+          <span class="atk-node">Nodo 4 · Lavador</span><strong>Orden falsa / replay</strong><span class="atk-desc">Apagar el lavador con un comando repetido</span></button>
       </div>
       <p id="attackFeedback" role="status" class="notice">No hay solicitudes de ataque enviadas en esta sesión.</p>
-      <h3>Registro de eventos de seguridad</h3>
-      <table><thead><tr><th>Hora</th><th>Nodo</th><th>Ataque</th><th>Acción</th><th>Motivo</th></tr></thead><tbody id="securityEvents"><tr><td colspan="5">Sin eventos de seguridad recibidos</td></tr></tbody></table>
+
+      <div class="cols-2 sec-row">
+        <article class="chart-card">
+          <header><div><h3>Rechazos por nodo</h3><p>Eventos recibidos en <code>upc/g1/seguridad/eventos</code></p></div></header>
+          <div class="chart-box tall"><canvas id="chSec"></canvas><div class="empty">Sin eventos</div></div>
+        </article>
+        <article class="card">
+          <h3>Registro de eventos de seguridad</h3>
+          <div class="table-wrap">
+            <table><thead><tr><th>Hora</th><th>Nodo</th><th>Ataque</th><th>Acción</th><th>Motivo</th></tr></thead><tbody id="securityEvents"><tr><td colspan="5" class="td-empty">Sin eventos de seguridad recibidos</td></tr></tbody></table>
+          </div>
+        </article>
+      </div>
     </section>
+
+    <!-- ============ 5. RESULTADOS ============ -->
     <section id="resultados" class="panel" hidden aria-label="Resultados">
-      <h2>Comparación A vs. B (y C opcional)</h2>
-      <p>Comparar tiempo desde detección hasta actuación y falsas activaciones. Los datos experimentales se guardan en <code>pruebas/</code>.</p>
+      <div class="section-head">
+        <div>
+          <p class="kicker">Experimentos</p>
+          <h2>Comparación A vs. B (y C opcional)</h2>
+          <p class="muted">Comparar tiempo desde detección hasta actuación y falsas activaciones. Los datos experimentales se guardan en <code>pruebas/</code>.</p>
+        </div>
+      </div>
+
+      <div class="alt-grid">
+        <article class="alt">
+          <span class="alt-badge">A</span>
+          <h3>Umbral fijo en Edge</h3>
+          <p>Cada nodo decide con un umbral; el gateway solo transporta el comando firmado al lavador, sin confirmación de dos sensores.</p>
+          <dl><dt>Se espera</dt><dd>Menor latencia · más falsas activaciones</dd></dl>
+        </article>
+        <article class="alt">
+          <span class="alt-badge">B</span>
+          <h3>Regla Fog coordinada</h3>
+          <p>El gateway exige ≥ 2 sensores elevados, promedio móvil y viento hacia la comunidad antes de ordenar el lavador.</p>
+          <dl><dt>Se espera</dt><dd>Algo más de latencia · menos falsas alarmas</dd></dl>
+        </article>
+        <article class="alt alt-opt">
+          <span class="alt-badge">C</span>
+          <h3>Modelo IA (opcional)</h3>
+          <p>Clasificador entrenado con datos registrados; solo si el grupo lo implementa y lo valida.</p>
+          <dl><dt>Estado</dt><dd>Opcional</dd></dl>
+        </article>
+      </div>
+
       <div class="notice">Resultados de pruebas reales: pendientes de ejecución y análisis. No se muestran métricas ficticias.</div>
+
+      <h3 class="sub">Mensajes recibidos en esta sesión</h3>
+      <div class="chart-card">
+        <header><div><h3>Mensajes por nodo</h3><p>Conteo de mensajes MQTT recibidos por este navegador desde que se abrió la página</p></div></header>
+        <div class="chart-box"><canvas id="chCount"></canvas><div class="empty">Sin datos</div></div>
+      </div>
+
       <div id="thingspeakContainer"></div>
     </section>
   </main>
+
   <footer>G1 Pesca · Simulación académica, no monitoreo ambiental certificado · Estado de integración: en desarrollo</footer>
 </body>
 </html>
