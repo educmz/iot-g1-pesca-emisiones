@@ -1,4 +1,4 @@
-# Nodo 5 — Gateway Fog ResQ
+# Nodo 5 — Gateway Fog G1 Pesca
 
 Responsable: Eduardo. Este firmware integra el contrato real de las ramas fusionadas de Fernando, Fabricio, Gonzalo y Pedro.
 
@@ -13,7 +13,7 @@ Responsable: Eduardo. Este firmware integra el contrato real de las ramas fusion
 - Comandos D5 con HMAC-SHA256 y contador monotónico persistido: D5|ts_unix_segundos|seq|cmd|valor. Los envía a N4 (HB, RIESGO_ON, MAX, ON, RIESGO_OFF, OFF), N3 (HB con valor 1), y N1 (VENT_MAX/VENT_AUTO).
 - Detecta confirmación real de N4 (sensor confirmado desde el switch) y EVENTO FALLA_LAVADOR firmado por N4. Si no se confirma en 10 segundos después de ON, o si D4 enciende preventivamente sin confirmación durante 10 s, firma VENT_MAX a N1.
 - VENT_MAX queda enclavado incluso tras reinicio del Gateway. Para levantarlo, presionar el botón durante 2,5 segundos y demostrar riesgo normal con fuentes frescas más confirmación física de N4. Pulsación breve solo reconoce.
-- ThingSpeak opcional por HTTPS CA validada y Write API Key privada, a un intervalo de 20 s. No sustituye datos ausentes con ceros. Sin CA y clave no se conecta, y MQTT sigue funcionando.
+- ThingSpeak opcional por HTTPS CA validada y Write API Key privada, a un intervalo de 25 s. En la version de laboratorio se programa el envío en una tarea FreeRTOS separada. El envío cloud no depende de MQTT conectado; solo se incluyen los campos de sensores frescos y HMAC válidos. No sustituye datos ausentes con ceros. Sin CA y clave no se conecta, y MQTT puede seguir funcionando sin ThingSpeak. Se registran HTTP, entry_id y motivos de omisión; ENABLE_THINGSPEAK=false permite una prueba aislada.
 
 ## Archivos
 - sketch.ino: Gateway Fog con MQTT, HMAC, TFT y actuadores.
@@ -32,6 +32,14 @@ Responsable: Eduardo. Este firmware integra el contrato real de las ramas fusion
 5. La clave privada de D5 debe coincidir en N1 (HMAC_KEY_GATEWAY), N3 (HMAC_KEY_GATEWAY) y N4 (CLAVE_GATEWAY). NUNCA mostrar claves en captura, commit ni chat.
 6. Las cuatro simulaciones de los otros nodos también deben tener copiadas sus versiones finales de main; GitHub no actualiza automáticamente Wokwi/Cirkit.
 7. Para ThingSpeak, crear un canal en su cuenta, obtener Write API Key y configurar el CA PEM verificado de api.thingspeak.com; mantener ambos dentro de secrets.h. El Gateway funciona sin ThingSpeak si no se configura.
+
+## Estado real del laboratorio (05/11/2026)
+
+- Broker de simulaciones: `broker.emqx.io:1883`, con desconexiones frecuentes `state=-3` incluso con WiFi conectado y en una ocasión antes de HTTPS. **Pendiente de solucionar; no afirmar que el nuevo sketch lo corrigió**.
+- MQTT RX y HMAC aceptado por D5 desde Nodo 1: 4 mensajes `gas_raw` y `temperatura`; TFT llegó a mostrar N1=3628 ADC antes de perder conexión.
+- ThingSpeak canal privado 3567916: confirmados HTTP 200 con `entry_id>0`. Cuando no hay lecturas frescas solo se guardan riesgo y ventilación (campos 1 y 8).
+- N2, N3, N4 y Fields 2–7 siguen pendientes de validación en la ejecución simultánea distribuida.
+- Ver [diagnóstico reproducible](../../docs/diagnostico-mqtt-2026-11-05.md). La copia de Wokwi no se sincroniza sola con GitHub; actualizar manualmente cada sketch.
 
 ## Ensayos de la demostración
 | Caso | Estímulo | Comportamiento esperado |
