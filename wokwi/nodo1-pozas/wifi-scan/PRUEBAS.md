@@ -1,6 +1,6 @@
 # Verificación de correcciones del Nodo 1 — versión para probar
 
-1. Abre [el Wokwi de Fernando](https://wokwi.com/projects/479819491217347585) y para la simulación.
+1. Abre [el Wokwi de Fernando](https://wokwi.com/projects/479864540006804481) y para la simulación.
 2. Copia `wifi-scan.ino` de esta carpeta en la pestaña `sketch.ino` de Wokwi. Copia también el contenido de `diagram.json` y `libraries.txt`.
 3. Crea una pestaña nueva `secrets.h` a partir de `secrets.example.h`. Configura claves HMAC de laboratorio privadas, **distintas** para Nodo 1 y para órdenes del Gateway D5. Para que D5 firme órdenes a Nodo 1, debe utilizar la misma `HMAC_KEY_GATEWAY`. No subir ese archivo.
 4. Ejecuta Play y comprueba mensajes `NODO1`, `[EDGE]` y, cuando conecte, `[MQTT]`.
