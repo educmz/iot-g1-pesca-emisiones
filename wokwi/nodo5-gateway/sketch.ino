@@ -25,7 +25,7 @@
 
 constexpr uint8_t TFT_CS=5, TFT_DC=27, TFT_RST=26;
 constexpr uint8_t BTN_PIN=25, LED_PIN=32, I2C_SDA=21, I2C_SCL=22;
-constexpr uint32_t MQTT_RETRY_MS=5000, WIFI_RETRY_MS=10000;
+constexpr uint32_t MQTT_RETRY_MS=15000, WIFI_RETRY_MS=45000;
 constexpr uint32_t HEARTBEAT_MS=20000, D5_STATUS_MS=30000;
 constexpr uint32_t FOG_MS=1000, SCREEN_MS=1000, SAMPLE_MAX_AGE_MS=12000;
 constexpr uint32_t CONFIRM_WAIT_MS=10000, THINGSPEAK_MS=20000;
@@ -73,6 +73,7 @@ uint32_t d4UnconfirmedSince=0;
 uint32_t lastButtonChange=0,buttonPressedAt=0;
 bool prefsOK=false,rtcOK=false,buttonStable=HIGH,buttonRawLast=HIGH,holdHandled=false;
 bool acknowledged=false,backupLatched=false;
+bool wifiWasConnected=false, mqttWasConnected=false;
 int desiredAction=-1,previousLevel=-1;
 unsigned long totalVerified=0,totalRejected=0,totalUntrustedEvents=0,totalTrustedSecurity=0;
 String lastEvent="ARRANCANDO";
@@ -203,6 +204,10 @@ void acceptData(const char* topic,byte* bytes,unsigned int length) {
   // Write the accepted high-water mark before processing. Fail closed on NVS failure.
   if(prefs.putULong64(seqStorage(n),seq)==0) {totalRejected++;return;}
   lastSeqByNode[n]=seq; totalVerified++;
+  if(totalVerified<=4 || (totalVerified%20)==0) {
+    Serial.printf("[HMAC] ACEPTADO %s / %s seq=%s total=%lu\n",
+        id.c_str(),sensor.c_str(),str64(seq).c_str(),totalVerified);
+  }
   latestData=millis();
 
   // Invalid signed quality cancels any older apparently fresh sample.
@@ -489,28 +494,57 @@ void drawScreen() {
   drawLed();
 }
 void handleNetwork(uint32_t now) {
-  if(WiFi.status()!=WL_CONNECTED) {
-    if(!lastWifi || now-lastWifi>=WIFI_RETRY_MS) {
-      lastWifi=now;WiFi.reconnect();
-      Serial.println("[WiFi] reintentando");
+  wl_status_t wifiStatus=WiFi.status();
+  if(wifiStatus!=WL_CONNECTED) {
+    if(wifiWasConnected)Serial.println("[WiFi] Desconectado; esperando reconexion");
+    wifiWasConnected=false;
+    mqttWasConnected=false;
+    // WiFi.begin() was started in setup(). Do not immediately restart an
+    // ongoing association; this caused unstable repeated attempts in Wokwi.
+    if((uint32_t)(now-lastWifi)>=WIFI_RETRY_MS) {
+      lastWifi=now;
+      Serial.printf("[WiFi] Esperando Wokwi-GUEST, estado=%d; reintentando\n",
+                    int(wifiStatus));
+      if(wifiStatus==WL_DISCONNECTED || wifiStatus==WL_CONNECTION_LOST ||
+         wifiStatus==WL_CONNECT_FAILED || wifiStatus==WL_NO_SSID_AVAIL) {
+        WiFi.reconnect();
+      }
     }
     return;
   }
-  if(mqtt.connected())return;
-  if(lastMQTT && now-lastMQTT<MQTT_RETRY_MS)return;
+  if(!wifiWasConnected) {
+    wifiWasConnected=true;
+    Serial.print("[WiFi] Conectado, IP=");
+    Serial.println(WiFi.localIP());
+  }
+  if(mqtt.connected()) {
+    mqttWasConnected=true;
+    return;
+  }
+  if(mqttWasConnected) {
+    mqttWasConnected=false;
+    Serial.println("[MQTT] Conexion perdida, iniciando recuperacion");
+  }
+  if(lastMQTT && (uint32_t)(now-lastMQTT)<MQTT_RETRY_MS)return;
   lastMQTT=now;
+  Serial.printf("[MQTT] Conectando a %s:%u...\n",MQTT_HOST, MQTT_PORT);
   String cid="g1-d5-"+String((uint32_t)esp_random(),HEX);
   if(mqtt.connect(cid.c_str(),T_STATUS,1,true,
         "{\"id\":\"nodo5\",\"estado\":\"offline\"}")) {
-    mqtt.subscribe("upc/g1/+/datos");
-    mqtt.subscribe(T_D4_ALERT);
-    mqtt.subscribe(T_SECURITY);
+    bool subDatos=mqtt.subscribe("upc/g1/+/datos");
+    bool subD4=mqtt.subscribe(T_D4_ALERT);
+    bool subSeg=mqtt.subscribe(T_SECURITY);
+    mqttWasConnected=true;
     desiredAction=-1;lastHB=0;lastStatus=0;
-    Serial.println("[MQTT] D5 suscrito a datos HMAC de D1-D4");
+    Serial.printf("[MQTT] Conectado y suscrito: datos=%d D4=%d seg=%d\n",
+                  int(subDatos),int(subD4),int(subSeg));
     publishStatus();
     sendHeartbeats();
     if(backupLatched)backupVentilation("RESTAURAR_LATCHEO_NVS");
-  } else Serial.printf("[MQTT] fallo rc=%d\n",mqtt.state());
+  } else {
+    Serial.printf("[MQTT] fallo rc=%d; siguiente intento en %lu s\n",
+                  mqtt.state(),(unsigned long)(MQTT_RETRY_MS/1000));
+  }
 }
 // ThingSpeak is OPTIONAL; require HTTPS CA and private Write API key.
 // No write occurs with example values and no credentials are committed.
@@ -565,8 +599,12 @@ void setup() {
   mqtt.setCallback(onMQTT);
   mqtt.setBufferSize(1024);
   mqtt.setKeepAlive(30);
-  mqtt.setSocketTimeout(1);
-  WiFi.mode(WIFI_STA);WiFi.begin(WIFI_SSID,WIFI_PASSWORD,6);
+  mqtt.setSocketTimeout(4); // seconds; Wokwi/public broker may respond slowly
+  WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);
+  WiFi.begin(WIFI_SSID,WIFI_PASSWORD,6);
+  lastWifi=millis();
+  Serial.println("[WiFi] Buscando Wokwi-GUEST sin reiniciar el intento");
   configTime(0,0,"pool.ntp.org","time.google.com");
   Serial.println("[D5] Fog seguro: espera telemetria firmada; no usa datos falsos");
   drawScreen();
