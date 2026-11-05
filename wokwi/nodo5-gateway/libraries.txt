@@ -6,3 +6,4 @@ Adafruit ILI9341
 Adafruit NeoPixel
 RTClib
 PubSubClient
+ArduinoJson@6.21.5

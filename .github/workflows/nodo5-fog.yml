@@ -1,0 +1,40 @@
+name: Verificar Nodo 5 Fog y MQTT
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [feat/nodo5-fog-integrado]
+jobs:
+  nodo5:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Probar reglas Fog en C++ nativo
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror -I wokwi/nodo5-gateway             wokwi/nodo5-gateway/tests/test_fog.cpp -o /tmp/test_fog
+          /tmp/test_fog
+      - name: Validar JSON del circuito
+        run: python3 -m json.tool wokwi/nodo5-gateway/diagram.json > /dev/null
+      - name: Instalar soporte ESP32
+        run: |
+          arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core install esp32:esp32 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+      - name: Instalar librerias de pantalla y comunicaciones
+        run: |
+          arduino-cli lib install "Adafruit GFX Library"
+          arduino-cli lib install "Adafruit ILI9341"
+          arduino-cli lib install "Adafruit NeoPixel"
+          arduino-cli lib install "RTClib"
+          arduino-cli lib install "PubSubClient"
+          arduino-cli lib install "ArduinoJson@6.21.5"
+      - name: Preparar firmware con plantilla sin secretos
+        run: |
+          mkdir -p "$RUNNER_TEMP/nodo5"
+          cp wokwi/nodo5-gateway/sketch.ino "$RUNNER_TEMP/nodo5/nodo5.ino"
+          cp wokwi/nodo5-gateway/fog_logic.h "$RUNNER_TEMP/nodo5/fog_logic.h"
+          cp wokwi/nodo5-gateway/secrets.example.h "$RUNNER_TEMP/nodo5/secrets.h"
+      - name: Compilar firmware ESP32
+        run: |
+          arduino-cli compile --fqbn esp32:esp32:esp32 "$RUNNER_TEMP/nodo5" --warnings all
