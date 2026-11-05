@@ -1,5 +1,5 @@
 #pragma once
-#define MQTT_HOST "broker.hivemq.com"
+#define MQTT_HOST "broker.emqx.io"
 #define MQTT_PORT 1883
 #define CLAVE_GATEWAY "REEMPLAZAR_CON_CLAVE_DE_LABORATORIO"
 #define CLAVE_NODO4 "REEMPLAZAR_CON_OTRA_CLAVE_DE_LABORATORIO"
