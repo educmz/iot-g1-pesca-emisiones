@@ -69,6 +69,7 @@ uint64_t lastSeqByNode[4]={0,0,0,0};
 uint64_t nextCommandSeq=0;
 uint32_t latestData=0, lastWifi=0, lastMQTT=0,lastHB=0,lastStatus=0;
 uint32_t lastFog=0,lastScreen=0,lastThingSpeak=0,lastOnCommand=0;
+uint32_t d4UnconfirmedSince=0;
 uint32_t lastButtonChange=0,buttonPressedAt=0;
 bool prefsOK=false,rtcOK=false,buttonStable=HIGH,buttonRawLast=HIGH,holdHandled=false;
 bool acknowledged=false,backupLatched=false;
@@ -370,10 +371,18 @@ void processFog(uint32_t now) {
   }
 }
 void checkConfirmation(uint32_t now) {
+  // D4 can auto-start its lavador BEFORE the Gateway sends an ON command.
+  // Track a physically unconfirmed ON using authenticated sensor readings.
+  bool on=n4Lavador.fresh() && n4Lavador.avg()>=0.5f;
+  bool confirmed=n4Confirm.fresh() && n4Confirm.avg()>=0.5f;
+  if(on && n4Confirm.fresh() && !confirmed) {
+    if(!d4UnconfirmedSince)d4UnconfirmedSince=now;
+    if(!backupLatched && now-d4UnconfirmedSince>=CONFIRM_WAIT_MS)
+      backupVentilation("D4_ENCENDIDO_SIN_CONF_10S");
+  } else d4UnconfirmedSince=0;
   if(!lastOnCommand || backupLatched)return;
   if((uint32_t)(now-lastOnCommand)<CONFIRM_WAIT_MS)return;
-  bool recentlyConfirmed=n4Confirm.fresh() && n4Confirm.avg()>=0.5f &&
-                         n4Confirm.at>=lastOnCommand;
+  bool recentlyConfirmed=confirmed && n4Confirm.at>=lastOnCommand;
   if(!recentlyConfirmed)backupVentilation("D4_SIN_CONFIRMACION_10S");
 }
 void handleButton(uint32_t now) {
