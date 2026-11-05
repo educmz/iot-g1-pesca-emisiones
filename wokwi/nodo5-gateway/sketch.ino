@@ -64,7 +64,7 @@ struct History {
     return sum/count;
   }
 };
-History n1Gas,n1Temp,n2Gas,n2Temp,n3Gas,n3Wind,n3Risk,n4Lavador,n4Confirm,n4Intensity;
+History n1Gas,n1Temp,n1Vent,n2Gas,n2Temp,n3Gas,n3Wind,n3Risk,n4Lavador,n4Confirm,n4Intensity;
 uint64_t lastSeqByNode[4]={0,0,0,0};
 uint64_t nextCommandSeq=0;
 uint32_t latestData=0, lastWifi=0, lastMQTT=0,lastHB=0,lastStatus=0;
@@ -74,7 +74,7 @@ uint32_t lastButtonChange=0,buttonPressedAt=0;
 bool prefsOK=false,rtcOK=false,buttonStable=HIGH,buttonRawLast=HIGH,holdHandled=false;
 bool acknowledged=false,backupLatched=false;
 int desiredAction=-1,previousLevel=-1;
-unsigned long totalVerified=0,totalRejected=0,totalUntrustedEvents=0;
+unsigned long totalVerified=0,totalRejected=0,totalUntrustedEvents=0,totalTrustedSecurity=0;
 String lastEvent="ARRANCANDO";
 FogDecision current={1,0,false,false,false};
 String lastD4EventSignatures[8];
@@ -140,6 +140,7 @@ bool sensorExpected(int n,const String& s,const String& unit,float v) {
   if(n==0) {
     if(s=="gas_raw")return unit=="adc" && v>=0 && v<=4095;
     if(s=="temperatura")return unit=="C" && v>=-127 && v<=125;
+    if(s=="ventilacion")return unit=="estado" && (v==0 || v==1);
   } else if(n==1) {
     if(s=="gas_relativo")return unit=="%" && v>=0 && v<=100;
     if(s=="gas_raw")return unit=="adc" && v>=0 && v<=4095;
@@ -208,6 +209,7 @@ void acceptData(const char* topic,byte* bytes,unsigned int length) {
   if(!dataQualityOK(n,quality)) {
     if(n==0 && sensor=="gas_raw")n1Gas.invalidate();
     if(n==0 && sensor=="temperatura")n1Temp.invalidate();
+    if(n==0 && sensor=="ventilacion")n1Vent.invalidate();
     if(n==1 && sensor=="gas_relativo")n2Gas.invalidate();
     if(n==1 && sensor=="temperatura")n2Temp.invalidate();
     if(n==2 && sensor=="gas")n3Gas.invalidate();
@@ -217,6 +219,7 @@ void acceptData(const char* topic,byte* bytes,unsigned int length) {
   }
   if(n==0 && sensor=="gas_raw")n1Gas.add(val);
   if(n==0 && sensor=="temperatura")n1Temp.add(val);
+  if(n==0 && sensor=="ventilacion")n1Vent.add(val);
   if(n==1 && sensor=="gas_relativo")n2Gas.add(val);
   if(n==1 && sensor=="temperatura")n2Temp.add(val);
   if(n==2 && sensor=="gas")n3Gas.add(val);
@@ -266,10 +269,35 @@ void acceptD4Alert(byte* bytes,unsigned int length) {
   }
 }
 void acceptSecurityEvent(byte* bytes,unsigned int length) {
-  // Security events from other nodes use DIFFERENT or UNSIGNED formats.
-  // Count only as untrusted hints here; do not trigger actuation.
   if(length==0||length>750)return;
-  totalUntrustedEvents++;
+  StaticJsonDocument<768> j;
+  if(deserializeJson(j,bytes,length)) {totalUntrustedEvents++;return;}
+  if(!j["nodo"].is<const char*>() || !j["ataque"].is<const char*>() ||
+     !j["motivo"].is<const char*>() || !j["ts"].is<uint32_t>() ||
+     !j["firma"].is<const char*>() || String(j["accion"]|"")!="RECHAZADO") {
+    totalUntrustedEvents++;return;
+  }
+  String node=j["nodo"].as<String>(),type=j["ataque"].as<String>();
+  String reason=j["motivo"].as<String>(),signature=j["firma"].as<String>();
+  uint32_t ts=j["ts"].as<uint32_t>();
+  String material,keyType;
+  const char* key="";
+  if(node=="nodo1") {
+    material=String("nodo1|")+ts+"|"+type+"|"+reason;
+    key=HMAC_KEY_NODO1;
+  } else if(node=="nodo4" &&
+            (j["seq_rechazado"].is<uint64_t>()||j["seq_rechazado"].is<uint32_t>()) &&
+            recentUnix(ts)) {
+    uint64_t seq=j["seq_rechazado"].as<uint64_t>();
+    material=String("D4|")+ts+"|"+type+"|evento|VALIDO|"+type+"|"+reason+"|"+str64(seq);
+    key=HMAC_KEY_NODO4;
+  } else {
+    totalUntrustedEvents++;return; // D2 and D3 currently lack common signed event schema.
+  }
+  if(sameSignature(signature,hmac256(material,key))) {
+    totalTrustedSecurity++;
+    Serial.printf("[SEGURIDAD VERIFICADA] %s: %s\n",node.c_str(),type.c_str());
+  } else totalUntrustedEvents++;
 }
 void onMQTT(char* topic,byte* payload,unsigned int length) {
   if(strcmp(topic,T_D4_ALERT)==0) {acceptD4Alert(payload,length);return;}
@@ -442,10 +470,13 @@ void drawScreen() {
   tft.print("/");
   tft.print(n4Confirm.fresh()?(n4Confirm.avg()>0.5?"SI":"NO"):"--");
   tft.setCursor(8,168);tft.setTextColor(backupLatched?ILI9341_RED:ILI9341_WHITE);
-  tft.print(backupLatched?"RESPALDO N1: VENT_MAX":"Respaldo: no activo");
+  if(backupLatched) {
+    tft.print(n1Vent.fresh()&&n1Vent.avg()>=0.5?"VENT_MAX N1 CONFIRMADO":"VENT_MAX N1 PENDIENTE");
+  } else tft.print("Respaldo: no activo");
   tft.setTextColor(ILI9341_WHITE);
   tft.setCursor(8,187);
-  tft.print("Datos rechazados: ");tft.print(totalRejected);
+  tft.print("Rechazados: ");tft.print(totalRejected);
+  tft.print("  Seguridad: ");tft.print(totalTrustedSecurity);
   tft.setCursor(8,205);
   if(rtcOK) {
     DateTime d=rtc.now();char b[28];
