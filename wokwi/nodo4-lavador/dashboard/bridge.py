@@ -29,8 +29,8 @@ except ImportError:
 ROOT = Path(__file__).resolve().parent
 CONFIG_FILE = ROOT / 'config.local.json'
 STATIC = {
-    '/': ('panel/index.html', 'text/html; charset=utf-8'),
-    '/index.html': ('panel/index.html', 'text/html; charset=utf-8'),
+    '/': ('panel/panel-nodo4.html', 'text/html; charset=utf-8'),
+    '/index.html': ('panel/panel-nodo4.html', 'text/html; charset=utf-8'),
     '/styles.css': ('panel/styles.css', 'text/css; charset=utf-8'),
     '/app.js': ('panel/app.js', 'application/javascript; charset=utf-8'),
 }
