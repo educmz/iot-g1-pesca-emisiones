@@ -465,7 +465,8 @@ void sendThingSpeak(uint32_t now) {
   if(now-lastThingSpeak<THINGSPEAK_MS || !mqtt.connected() ||
      WiFi.status()!=WL_CONNECTED)return;
   lastThingSpeak=now;
-  if(!validKey(THINGSPEAK_WRITE_API_KEY) ||
+  if(strlen(THINGSPEAK_WRITE_API_KEY)<12 ||
+     strncmp(THINGSPEAK_WRITE_API_KEY,"REEMPLAZAR",9)==0 ||
      strlen(THINGSPEAK_ROOT_CA)<200)return;
   WiFiClientSecure secure;
   secure.setCACert(THINGSPEAK_ROOT_CA);
@@ -476,13 +477,14 @@ void sendThingSpeak(uint32_t now) {
   http.addHeader("Content-Type","application/x-www-form-urlencoded");
   String body=String("api_key=")+THINGSPEAK_WRITE_API_KEY+
     "&field1="+String(current.level)+
-    "&field2="+(n1Gas.fresh()?String(n1Gas.avg(),0):"0")+
-    "&field3="+(n2Gas.fresh()?String(n2Gas.avg(),1):"0")+
-    "&field4="+(n3Gas.fresh()?String(n3Gas.avg(),0):"0")+
-    "&field5="+(n3Wind.fresh()?String(n3Wind.avg(),0):"0")+
-    "&field6="+(n4Lavador.fresh()?String(n4Lavador.avg(),0):"0")+
-    "&field7="+(n4Confirm.fresh()?String(n4Confirm.avg(),0):"0")+
     "&field8="+String(backupLatched?1:0);
+  // Do not substitute zero for a missing/unverified sensor.
+  if(n1Gas.fresh())body+="&field2="+String(n1Gas.avg(),0);
+  if(n2Gas.fresh())body+="&field3="+String(n2Gas.avg(),1);
+  if(n3Gas.fresh())body+="&field4="+String(n3Gas.avg(),0);
+  if(n3Wind.fresh())body+="&field5="+String(n3Wind.avg(),0);
+  if(n4Lavador.fresh())body+="&field6="+String(n4Lavador.avg(),0);
+  if(n4Confirm.fresh())body+="&field7="+String(n4Confirm.avg(),0);
   int status=http.POST(body);
   Serial.printf("[ThingSpeak] HTTP %d\n",status);
   http.end();
