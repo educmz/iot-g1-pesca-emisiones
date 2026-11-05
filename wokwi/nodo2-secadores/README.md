@@ -32,7 +32,7 @@
 - Abrir Ciberseguridad, pulsar **Simular suplantación** y verificar `HMAC_INVALIDO` / `RECHAZADO`.
 - Ejecutar `node --test tests/*.test.js` en carpeta `backend/`.
 
-## Integración con Eduardo (NO fusionar a main sin revisar)
+## Integración
 
 El ESP32 publica `upc/g1/nodo2/datos`, `alerta`, `estado`, con un JSON de tres lecturas y firma HMAC. El contrato del equipo propone **un mensaje por sensor**; debe aprobarse/adaptarse.
 
