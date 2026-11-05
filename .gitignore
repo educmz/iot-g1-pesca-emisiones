@@ -47,3 +47,7 @@ dashboard/js/config.js
 # Sistema operativo
 .DS_Store
 Thumbs.db
+
+# Secretos locales paneles MQTT
+config.local.json
+**/config.local.json

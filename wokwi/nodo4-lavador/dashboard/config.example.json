@@ -1,0 +1,11 @@
+{
+  "host": "broker.hivemq.com",
+  "port": 8000,
+  "topic_cmd": "upc/g1/nodo4/cmd",
+  "topic_alerta": "upc/g1/nodo4/alerta",
+  "topic_datos": "upc/g1/nodo4/datos",
+  "topic_paquete": "upc/g1/nodo4/paquete",
+  "topic_estado": "upc/g1/nodo4/estado",
+  "clave_gateway": "REEMPLAZAR_CLAVE_PRIVADA_D5_DISTINTA",
+  "clave_nodo4": "REEMPLAZAR_CLAVE_PRIVADA_D4_DISTINTA"
+}

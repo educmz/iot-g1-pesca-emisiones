@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0c1624">
+  <meta name="description" content="Panel del Nodo D4 — lavador de gases, MQTT y ciberseguridad">
+  <title>G1 Pesca · D4 Lavador de gases</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script>window.D4_PANEL_TOKEN = '__PANEL_TOKEN__';</script>
+  <script defer src="/app.js"></script>
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar" aria-label="Navegación del módulo">
+    <div class="brand-logo"><span class="brand-mark">G<span>1</span></span><div><b>G1 PESCA</b><small>IoT · Laboratorio</small></div></div>
+    <div class="side-section-label">NAVEGACIÓN</div>
+    <nav class="navlist">
+      <a class="nav-item active" href="#operacion"><span class="nav-icon">◈</span> Operación <span class="nav-trail">01</span></a>
+      <a class="nav-item" href="#seguridad"><span class="nav-icon">◇</span> Ciberseguridad <span class="nav-trail">02</span></a>
+      <a class="nav-item" href="#eventos"><span class="nav-icon">☷</span> Historial <span class="nav-trail">03</span></a>
+      <a class="nav-item" href="#integracion"><span class="nav-icon">⌁</span> Integración <span class="nav-trail">04</span></a>
+    </nav>
+    <div class="sidebar-bottom">
+      <div class="side-node"><span class="circle-node">04</span><span><b>Lavador de gases</b><small>ESP32 + A4988 + relé</small></span></div>
+      <div class="side-foot">PESQUERA COSTA NORTE S.A.C.<br>Prototipo académico · Chimbote</div>
+    </div>
+  </aside>
+  <div class="workspace">
+    <header class="topbar">
+      <div class="breadcrumb">PLANTA / OPERACIONES <span>/</span> <strong>NODO D4</strong></div>
+      <div class="topright"><span class="environment-tag">LABORATORIO</span><span id="clock" class="clock">--:--:--</span></div>
+    </header>
+    <main class="content">
+      <section class="pagehead" id="operacion">
+        <div><div class="eyebrow">CONTROL DE EMISIONES / NODO 04</div><h1>Lavador de <em>gases</em></h1><p>Supervisión local, actuación remota autenticada y protección de seguridad.</p></div>
+        <div id="connectivity" class="connection-chip waiting"><span class="pulse-dot"></span><span>Conectando MQTT</span></div>
+      </section>
+      <div class="notice" id="trust-notice" role="status"><span class="notice-icon">i</span><span id="trust-text">Esperando las primeras lecturas firmadas del ESP32.</span></div>
+      <section class="metric-grid" aria-label="Indicadores principales">
+        <article class="metric-card"><div class="metric-top"><span>ESTADO DEL LAVADOR</span><span class="metric-glyph">⏻</span></div><div class="metric-value" id="lavador">--</div><div class="metric-sub" id="lavador-note">Sin datos verificados</div><div class="metric-rail"><span id="lavador-rail"></span></div></article>
+        <article class="metric-card"><div class="metric-top"><span>CONFIRMACIÓN</span><span class="metric-glyph">✓</span></div><div class="metric-value" id="confirmacion">--</div><div class="metric-sub">Interruptor de funcionamiento</div><div class="metric-rail"><span id="confirmacion-rail"></span></div></article>
+        <article class="metric-card"><div class="metric-top"><span>INTENSIDAD DEL MOTOR</span><span class="metric-glyph">↗</span></div><div class="metric-value" id="intensidad">--</div><div class="metric-sub">Nivel configurado del A4988</div><div class="metric-rail"><span id="intensidad-rail"></span></div></article>
+        <article class="metric-card"><div class="metric-top"><span>RIESGO EN PLANTA</span><span class="metric-glyph">!</span></div><div class="metric-value" id="riesgo">--</div><div class="metric-sub" id="seguro-label">Modo seguro: desconocido</div><div class="metric-rail"><span id="riesgo-rail"></span></div></article>
+      </section>
+      <div class="body-grid">
+        <div class="main-column">
+          <section class="panel control-panel">
+            <div class="panel-head"><div><div class="eyebrow">MANDOS REMOTOS FIRMADOS</div><h2>Centro de control</h2></div><span class="panel-hint">HMAC-SHA256 + SEQ</span></div>
+            <p class="panel-desc">Estos mandos se firman en el puente local Python. El ESP32 valida cada orden antes de actuar.</p>
+            <div class="section-label">ENCENDIDO DEL EQUIPO</div>
+            <div class="control-buttons">
+              <button type="button" class="action-button primary" data-cmd="ON"><span class="button-symbol">⏻</span> Encender lavador</button>
+              <button type="button" class="action-button secondary" data-cmd="OFF" id="off-button"><span class="button-symbol">◯</span> Apagar lavador</button>
+            </div>
+            <div class="separator"></div>
+            <div class="section-label">REGULACIÓN DEL MOTOR</div>
+            <div class="speed-options" role="group" aria-label="Intensidad del motor">
+              <button type="button" class="speed-button" data-cmd="BAJO"><span>▂</span> Baja</button>
+              <button type="button" class="speed-button" data-cmd="MEDIO"><span>▅</span> Media</button>
+              <button type="button" class="speed-button" data-cmd="MAX"><span>█</span> Máxima</button>
+            </div>
+            <div class="control-note"><span class="shield-icon">◇</span><span>La orden de apagado se bloqueará en D4 ante riesgo alto o modo seguro, aunque la firma sea válida.</span></div>
+          </section>
+          <section class="panel trend-panel">
+            <div class="panel-head"><div><div class="eyebrow">TELEMETRÍA RECIBIDA</div><h2>Actividad del motor</h2></div><div class="legend"><span class="legend-line"></span> Nivel reportado</div></div>
+            <div class="chart-wrap"><svg id="trend" viewBox="0 0 620 164" preserveAspectRatio="none" role="img" aria-label="Evolución de los niveles de intensidad reportados"><line x1="8" x2="610" y1="16" y2="16" class="chart-grid"/><line x1="8" x2="610" y1="62" y2="62" class="chart-grid"/><line x1="8" x2="610" y1="108" y2="108" class="chart-grid"/><line x1="8" x2="610" y1="154" y2="154" class="chart-grid"/><path id="trend-area" class="chart-area" d=""/><path id="trend-line" class="chart-line" d=""/></svg><div id="chart-empty" class="chart-empty">Esperando telemetría del motor...</div></div>
+            <div class="chart-caption"><span>OFF / BAJA / MEDIA / MÁXIMA</span><span id="trend-count">0 lecturas</span></div>
+          </section>
+          <section class="panel security-panel" id="seguridad">
+            <div class="panel-head"><div><div class="eyebrow">VALIDACIÓN DE DEFENSAS / NODO 4</div><h2>Laboratorio de ciberseguridad</h2></div><span class="test-label">3 PRUEBAS</span></div>
+            <p class="panel-desc">Se generan ataques controlados contra tu propio nodo en el broker de prácticas. Las decisiones de seguridad se ejecutan dentro del ESP32.</p>
+            <div class="attack-grid">
+              <article class="attack-card"><span class="attack-count">01 / FIRMA FALSA</span><h3>Apagado no autorizado</h3><p>Publica una orden OFF con HMAC inválida y espera el rechazo del nodo.</p><button type="button" class="attack-button" data-action="ataque_falso">Ejecutar ataque HMAC <span>↗</span></button></article>
+              <article class="attack-card"><span class="attack-count">02 / REPLAY</span><h3>Repetición de orden</h3><p>Reenvía la última orden ON/OFF aceptada, sin modificar la firma ni el contador.</p><button type="button" class="attack-button" data-action="ataque_replay">Ejecutar ataque Replay <span>↗</span></button></article>
+              <article class="attack-card"><span class="attack-count">03 / REGLA DE SEGURIDAD</span><h3>OFF durante riesgo alto</h3><p>Activa el riesgo y envía un OFF correctamente firmado para probar su bloqueo.</p><button type="button" class="attack-button" data-action="probar_bloqueo">Probar bloqueo seguro <span>↗</span></button></article>
+            </div>
+            <div class="section-label risk-label">CONTROL DE ESCENARIO</div><div class="inline-actions"><button type="button" class="mini-button" data-cmd="RIESGO_ON">Activar riesgo alto</button><button type="button" class="mini-button" data-cmd="RIESGO_OFF">Restablecer riesgo normal</button></div>
+          </section>
+          <section class="panel events-panel" id="eventos">
+            <div class="panel-head"><div><div class="eyebrow">REGISTRO FIRMADO POR EL NODO</div><h2>Eventos y evidencias</h2></div><span id="security-count" class="event-counter">0 incidentes</span></div>
+            <div class="filter-line"><div class="filter-pills" role="group" aria-label="Filtrar eventos"><button class="filter-pill selected" data-filter="all">Todos</button><button class="filter-pill" data-filter="security">Seguridad</button><button class="filter-pill" data-filter="warning">Alertas</button></div><span id="event-count" class="subtle">0 eventos</span></div>
+            <div id="event-list" class="event-list" aria-live="polite"><div class="empty-events">Esperando eventos del nodo...</div></div>
+          </section>
+        </div>
+        <div class="side-column">
+          <section class="panel diagnostics-panel"><div class="panel-head"><div><div class="eyebrow">ESTADO DE CONEXIÓN</div><h2>Diagnóstico</h2></div><span class="diagnostics-icon">⌁</span></div><div class="diag-row"><span>Broker MQTT</span><b id="diag-mqtt">--</b></div><div class="diag-row"><span>Último dato firmado</span><b id="diag-age">--</b></div><div class="diag-row"><span>Heartbeat del nodo</span><b id="diag-hb">--</b></div><div class="diag-row"><span>Heartbeat enviado a D4</span><b id="diag-hb-enabled">--</b></div><div class="diag-row"><span>Firmas descartadas</span><b id="diag-invalid">0</b></div><div class="diag-row"><span>Transporte</span><b id="diag-transport">--</b></div><div class="diagnostics-actions"><button type="button" class="ghost-button" data-action="heartbeat_pausar">Pausar HB</button><button type="button" class="ghost-button" data-action="heartbeat_reanudar">Reanudar HB</button></div><p class="micro-note">Pausar HB permite probar el modo seguro tras más de 60 s sin contacto autenticado. No equivale a cortar la red del ESP32.</p></section>
+          <section class="panel last-command-panel"><div class="panel-head"><div><div class="eyebrow">TRAZABILIDAD</div><h2>Última orden</h2></div></div><div class="last-command-icon">⇄</div><div class="command-type" id="last-cmd">Sin órdenes enviadas</div><div class="cmd-status" id="last-cmd-state">—</div><div class="command-seq" id="last-seq">SEQ: —</div><p class="micro-note">La confirmación del broker no prueba la actuación. Esperamos <code>COMANDO_EJECUTADO</code> o <code>COMANDO_BLOQUEADO</code> publicado por D4.</p></section>
+          <section class="panel integration-panel" id="integracion"><div class="panel-head"><div><div class="eyebrow">PARA INTEGRACIÓN GRUPAL</div><h2>Interfaz MQTT</h2></div></div><div class="topic-list"><div><small>PUBLICA DATOS</small><code id="topic-datos">--</code></div><div><small>PUBLICA ALERTAS</small><code id="topic-alerta">--</code></div><div><small>PUBLICA ESTADO</small><code id="topic-estado">--</code></div><div><small>RECIBE COMANDOS</small><code id="topic-cmd">--</code></div></div><div class="integrator-note">Eduardo puede integrar este módulo en la pestaña <strong>Operación en vivo</strong> y los eventos en <strong>Ciberseguridad</strong>.</div></section>
+        </div>
+      </div>
+      <footer class="footer"><span>G1 PESCA · NODO 4 / LAVADOR DE GASES</span><span>Panel local educativo · Datos verificados con HMAC</span></footer>
+    </main>
+  </div>
+</div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
