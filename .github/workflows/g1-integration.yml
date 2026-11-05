@@ -1,0 +1,36 @@
+name: G1 integration regressions
+on:
+  pull_request:
+    branches: [main]
+jobs:
+  sequence-reservations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tests/integration/test_sequences.py
+      - run: node --check dashboard/js/app.js
+  emitters:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - path: wokwi/nodo1-pozas/wifi-scan
+            sketch: wifi-scan.ino
+            config: secrets
+          - path: wokwi/nodo2-secadores
+            sketch: sketch.ino
+            config: config
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Install ESP32 and libraries
+        run: |
+          arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core install esp32:esp32 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli lib install 'PubSubClient@2.8' 'ArduinoJson@6.21.5' 'OneWire' 'DallasTemperature' 'DHT sensor library for ESPx'
+      - name: Compile without credentials
+        run: |
+          mkdir -p "$RUNNER_TEMP/g1node"
+          cp '${{ matrix.path }}/${{ matrix.sketch }}' "$RUNNER_TEMP/g1node/g1node.ino"
+          cp '${{ matrix.path }}/${{ matrix.config }}.example.h' "$RUNNER_TEMP/g1node/${{ matrix.config }}.h"
+          arduino-cli compile --fqbn esp32:esp32:esp32 "$RUNNER_TEMP/g1node" --warnings all

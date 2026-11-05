@@ -67,12 +67,14 @@
     const table = el("dl");
     const readings = sensors[id] || {};
     Object.entries(readings).forEach(function ([sensor, payload]) {
-      table.append(el("dt", sensor), el("dd", String(payload.valor) + " " + (payload.unidad || "")));
+      table.append(el("dt", sensor), el("dd", (Date.now()-payload.receivedAt>12000 ? "CADUCADO" : String(payload.valor) + " " + (payload.unidad || "")) + " · recibido, HMAC no verificado en navegador"));
     });
     if (state[id]) table.append(el("dt", "Último estado"), el("dd", state[id]));
     if (!Object.keys(readings).length && !state[id]) container.append(el("p", "Sin datos"));
     else container.appendChild(table);
   }
+
+  setInterval(function () { Object.keys(sensors).forEach(showNode); }, 1000);
 
   function addSecurityEvent(payload) {
     if (!securityCount++) security.replaceChildren();
@@ -100,6 +102,7 @@
       // El dashboard solo visualiza. La firma se valida en el firmware/gateway, nunca con claves en el navegador.
       if (typeof data.valor === "object") return;
       sensors[id] = sensors[id] || {};
+      data.receivedAt=Date.now();
       sensors[id][typeof data.sensor === "string" ? data.sensor : "valor"] = data;
       showNode(id);
     }

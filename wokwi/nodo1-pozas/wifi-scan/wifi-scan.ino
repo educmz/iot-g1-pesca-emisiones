@@ -18,12 +18,42 @@
 #include <time.h>
 #include <math.h>
 #include "secrets.h"
+// BEGIN PERSISTENT TELEMETRY SEQUENCE
+// Reserve BEFORE use; a reboot burns the unused tail. Never wrap or fall back
+// to a RAM-only counter. Erased NVS requires explicit secure reprovisioning.
+#include <Preferences.h>
+class TelemetrySequence {
+  Preferences storage;
+  uint32_t current=0, ceiling=0;
+  bool initialized=false, healthy=false;
+public:
+  uint32_t next() {
+    if(!initialized) {
+      initialized=true;
+      healthy=storage.begin("g1txseq",false);
+      if(!healthy)return 0;
+      current=ceiling=storage.getUInt("reserved",0);
+    }
+    if(!healthy)return 0;
+    if(current==ceiling) {
+      if(ceiling>UINT32_MAX-256U) {healthy=false;return 0;}
+      uint32_t reserved=ceiling+256U;
+      if(storage.putUInt("reserved",reserved)!=sizeof(uint32_t)) {
+        healthy=false;return 0;
+      }
+      ceiling=reserved;
+    }
+    return ++current;
+  }
+};
+TelemetrySequence telemetrySequence;
+// END PERSISTENT TELEMETRY SEQUENCE
 
 constexpr int PIN_GAS=34, PIN_TEMP=15, PIN_BUZZER=16, PIN_RELE=17;
 constexpr int ADC_ALARMA=3820, ADC_SALTO_MAX=500;
 constexpr float TEMP_ALARMA_C=45.0f;
 constexpr uint32_t LECTURA_MS=2000, HEARTBEAT_MS=30000;
-constexpr uint32_t WIFI_RETRY_MS=10000, MQTT_RETRY_MS=5000;
+constexpr uint32_t WIFI_RETRY_MS=45000, MQTT_RETRY_MS=5000;
 
 const char* TOPIC_DATOS="upc/g1/nodo1/datos";
 const char* TOPIC_ALERTA="upc/g1/nodo1/alerta";
@@ -86,7 +116,9 @@ String materialDato(uint32_t ts, uint32_t seq, const char* sensor,
 void publicarDato(const char* topic,const char* sensor,float valor,
                   const char* unidad,const char* calidad,const char* tipo=nullptr) {
   if (!mqtt.connected()) return;
-  uint32_t ts=millis(), seq=++seqDatos;
+  seqDatos=telemetrySequence.next();
+  if(!seqDatos)return;
+  uint32_t ts=millis(), seq=seqDatos;
   String firma=hmacSha256(materialDato(ts,seq,sensor,valor,unidad,calidad),HMAC_KEY_NODO1);
   if (firma.length()!=64) {
     Serial.println("[HMAC] FALTA CLAVE NODO1: telemetria no publicada"); return;
@@ -164,6 +196,7 @@ void leerYDecidir() {
 
   publicarDato(TOPIC_DATOS,"gas_raw",(float)gasADC,"adc",calidadGas.c_str());
   publicarDato(TOPIC_DATOS,"temperatura",temperaturaC,"C",calidadTemp.c_str());
+  publicarDato(TOPIC_DATOS,"ventilacion",releActivo?1.0f:0.0f,"estado","ok");
   if(primeraMedicion || alertaLocal) {
     publicarDato(TOPIC_ALERTA,"riesgo_pozas",alertaLocal?1.0f:0.0f,
           "nivel",(validoGas && validoTemp)?"ok":"sospechosa",
@@ -234,7 +267,8 @@ void mantenerMQTT() {
   uint32_t ahora=millis();
   if(WiFi.status()!=WL_CONNECTED) {
     if(!ultimoWiFi || ahora-ultimoWiFi>=WIFI_RETRY_MS) {
-      ultimoWiFi=ahora; WiFi.begin(WIFI_SSID,WIFI_PASSWORD,6);
+      ultimoWiFi=ahora;
+      if(WiFi.status()!=WL_IDLE_STATUS)WiFi.reconnect();
       Serial.println("[WiFi] Reintento; seguridad Edge sigue activa");
     }
     return;
@@ -273,11 +307,13 @@ void setup() {
 
   mqtt.setServer(MQTT_HOST,MQTT_PORT);
   mqtt.setCallback(recibirMQTT);
-  mqtt.setBufferSize(1024);
+  if(!mqtt.setBufferSize(1024))Serial.println("[MQTT] ERROR: no se pudo reservar buffer 1024");
   mqtt.setSocketTimeout(1);
   mqtt.setKeepAlive(30);
   WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);
   WiFi.begin(WIFI_SSID,WIFI_PASSWORD,6);
+  ultimoWiFi=millis();
   ultimoWiFi=millis();
   configTime(0,0,"pool.ntp.org","time.google.com");
   Serial.println("NODO1: MQ2 ADC1 + BUZZER + EDGE + HMAC");

@@ -6,6 +6,36 @@
 #include <time.h>
 #include <mbedtls/md.h>
 #include "secrets.h"
+// BEGIN PERSISTENT TELEMETRY SEQUENCE
+// Reserve BEFORE use; a reboot burns the unused tail. Never wrap or fall back
+// to a RAM-only counter. Erased NVS requires explicit secure reprovisioning.
+#include <Preferences.h>
+class TelemetrySequence {
+  Preferences storage;
+  uint32_t current=0, ceiling=0;
+  bool initialized=false, healthy=false;
+public:
+  uint32_t next() {
+    if(!initialized) {
+      initialized=true;
+      healthy=storage.begin("g1txseq",false);
+      if(!healthy)return 0;
+      current=ceiling=storage.getUInt("reserved",0);
+    }
+    if(!healthy)return 0;
+    if(current==ceiling) {
+      if(ceiling>UINT32_MAX-256U) {healthy=false;return 0;}
+      uint32_t reserved=ceiling+256U;
+      if(storage.putUInt("reserved",reserved)!=sizeof(uint32_t)) {
+        healthy=false;return 0;
+      }
+      ceiling=reserved;
+    }
+    return ++current;
+  }
+};
+TelemetrySequence telemetrySequence;
+// END PERSISTENT TELEMETRY SEQUENCE
 
 constexpr uint8_t PIN_RELE = 26;
 constexpr uint8_t PIN_CONFIRMACION = 32;
@@ -198,7 +228,9 @@ void publicarPaquete() {
 void publicarSensorGrupo(const char* sensor, float valor, const char* unidad) {
   if (!mqtt.connected()) return;
   const uint32_t ts=millis();
-  const uint32_t seq=++secuenciaGrupo;
+  secuenciaGrupo=telemetrySequence.next();
+  if(!secuenciaGrupo)return;
+  const uint32_t seq=secuenciaGrupo;
   const char* calidad="ok";
   String canonico=String("nodo4|")+ts+"|"+seq+"|"+sensor+"|"+
                   String(valor,2)+"|"+unidad+"|"+calidad;
@@ -209,6 +241,7 @@ void publicarSensorGrupo(const char* sensor, float valor, const char* unidad) {
   j["valor"]=serialized(String(valor,2));
   j["unidad"]=unidad; j["calidad"]=calidad; j["firma"]=firma;
   char out[400];
+  if(measureJson(j)>=sizeof(out))return;
   if(serializeJson(j,out,sizeof(out))>0)mqtt.publish(TOPIC_DATOS,out);
 }
 
@@ -484,7 +517,7 @@ void conectarRed() {
   ultimoIntentoMqtt = ahora;
 
   if (mqtt.connect(idCliente.c_str(), TOPIC_ESTADO, 1, true, "{\"id\":\"nodo4\",\"estado\":\"offline\"}")) {
-    Serial.println("[MQTT] CONECTADO broker.hivemq.com:1883");
+    Serial.printf("[MQTT] CONECTADO %s:%u\n", MQTT_HOST, MQTT_PORT);
     if (mqtt.subscribe(TOPIC_CMD, 1)) {
       Serial.printf("[MQTT] SUBSCRITO=%s\n", TOPIC_CMD);
     } else {
@@ -554,7 +587,7 @@ void setup() {
   mqtt.setCallback(recibirMqtt);
   mqtt.setKeepAlive(15);
   mqtt.setSocketTimeout(1);
-  mqtt.setBufferSize(1024);
+  if(!mqtt.setBufferSize(1024))Serial.println("[MQTT] ERROR: no se pudo reservar buffer 1024");
   configTime(0, 0, "pool.ntp.org", "time.google.com");
   Serial.println("[INICIO] G1 PESCA - NODO D4 - MQTT / HMAC / ANTI-REPLAY");
   Serial.printf("[SEGURIDAD] ULTIMO_CONTROL=%llu ULTIMO_HB=%llu\n",
