@@ -2,7 +2,7 @@
 #pragma once
 #define WIFI_SSID "Wokwi-GUEST"
 #define WIFI_PASSWORD ""
-#define MQTT_HOST "broker.hivemq.com"
+#define MQTT_HOST "broker.emqx.io"
 #define MQTT_PORT 1883
 // Nodo3 firma sus sensores con esta clave, distinta de la clave de comandos D5.
 #define HMAC_KEY_NODO3 "REEMPLAZAR_CLAVE_NODO3_LOCALMENTE"
