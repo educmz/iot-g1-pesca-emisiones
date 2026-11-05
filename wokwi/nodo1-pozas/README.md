@@ -4,7 +4,7 @@
 **Rama de corrección:** `fix/nodo1-buzzer-adc-hmac`
 
 ## Versión de Wokwi corregida
-Los archivos se encuentran en [wifi-scan/](wifi-scan/), conservando la ubicación original. La simulación publicada en la URL original **no se actualiza automáticamente** desde GitHub.
+Los archivos se encuentran en [wifi-scan/](wifi-scan/), conservando la ubicación original. La simulación compartida por el equipo **no se actualiza automáticamente** desde GitHub.
 
 - [Firmware](wifi-scan/wifi-scan.ino): salida local con buzzer, lectura por ADC1, telemetría por sensor y órdenes firmadas HMAC/anti-replay.
 - [Circuito](wifi-scan/diagram.json): MQ-2 simulado en GPIO34, DS18B20 en GPIO15 con pull-up de 4,7 kΩ, buzzer en GPIO16 y relé en GPIO17.
@@ -23,7 +23,7 @@ Los archivos se encuentran en [wifi-scan/](wifi-scan/), conservando la ubicació
 [11 capturas de Fernando](img/) y [registro](Evidencia.md) **pertenecen a la versión anterior**; no demuestran que esta revisión compile, suene el buzzer ni valide HMAC. Hay que repetir las pruebas antes del merge.
 
 ## Enlaces existentes
-- **Wokwi:** https://wokwi.com/projects/479819491217347585
+- **Wokwi:** https://wokwi.com/projects/479864540006804481
 - **Cirkit:** https://app.cirkitdesigner.com/project/75988b2c-c401-4ed8-ae5e-e7d56159e44f
 
 **Cirkit Designer no se modifica al editar GitHub.** Fernando debe cambiar el diseño de Cirkit manualmente para representar buzzer/MQ-2. Un MQ-2 físico común usa 5 V y requiere adaptar la salida AOUT al máximo admitido por el ADC ESP32 (3,3 V). El diseño Wokwi representa un prototipo simulado, no valida el cableado físico de alimentación.
