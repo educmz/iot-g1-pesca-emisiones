@@ -23,6 +23,7 @@
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include <time.h>
+#include <Preferences.h>
 #include "mbedtls/md.h"
 #include "secrets.h"     // WIFI_SSID, WIFI_PASSWORD, MQTT_HOST, MQTT_PORT, HMAC_KEY_NODO3 (NO se sube a GitHub)
 
@@ -57,7 +58,7 @@ const char* T_DATOS   = "upc/g1/nodo3/datos";
 const char* T_ALERTA  = "upc/g1/nodo3/alerta";
 const char* T_ESTADO  = "upc/g1/nodo3/estado";
 const char* T_CMD     = "upc/g1/nodo3/cmd";
-const char* T_GW      = "upc/g1/nodo5/estado";        // latido del gateway
+const char* T_GW      = "upc/g1/nodo5/estado";        // presencia orientativa, NO autenticada
 const char* T_POZAS   = "upc/g1/nodo1/datos";         // contexto para la coherencia
 const char* T_SECAD   = "upc/g1/nodo2/datos";
 const char* T_SEG     = "upc/g1/seguridad/eventos";
@@ -75,8 +76,14 @@ int    vientoGrados = 0;
 bool   haciaComunidad = false;
 String calidad = "ok";
 Riesgo riesgo = BAJO, riesgoPublicado = BAJO;
-bool   modoSeguro = true;              // arranca seguro hasta escuchar al gateway
-unsigned long ultimoGateway = 0;
+bool   modoSeguro = true;              // SOLO un latido firmado de D5 permite relajarlo
+unsigned long ultimoGateway = 0; // actualizado EXCLUSIVAMENTE tras HMAC válido
+Preferences prefsGateway;
+bool prefsGatewayOK = false;
+uint64_t ultimoSeqGateway = 0;
+struct EcoSaliente { unsigned long seq; String firma; bool pendiente; };
+EcoSaliente ecos[16];
+uint8_t cursorEco = 0;
 unsigned long seq = 0;                 // contador de mensajes propios
 String pozasTxt = "sin dato", secadTxt = "sin dato";
 String mensajeViejo = "";              // guardado para simular el ataque de repetición
@@ -84,6 +91,7 @@ unsigned long tLectura = 0, tPublicar = 0, tLatido = 0, tReconexion = 0, tUltimo
 
 // ================= Utilidades =================
 String hmacHex(const String& msg) {
+  if (strlen(HMAC_KEY_NODO3) < 24 || strncmp(HMAC_KEY_NODO3, "REEMPLAZAR", 9) == 0) return "";
   uint8_t out[32];
   mbedtls_md_context_t ctx;
   mbedtls_md_init(&ctx);
@@ -96,6 +104,31 @@ String hmacHex(const String& msg) {
   for (int i = 0; i < 32; i++) sprintf(hex + 2 * i, "%02x", out[i]);
   hex[64] = 0;
   return String(hex);
+}
+
+// Latidos de D5: id=D5, ts=UTC segundos, seq creciente, cmd=HB, valor="1".
+// La firma se verifica antes de desactivar modo seguro. T_GW/estado NO basta.
+String hmacGateway(const String& msg) {
+  if (strlen(HMAC_KEY_GATEWAY) < 24 || strncmp(HMAC_KEY_GATEWAY, "REEMPLAZAR", 9) == 0) return "";
+  unsigned char out[32];
+  const mbedtls_md_info_t* info=mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
+  if (!info || mbedtls_md_hmac(info, (const unsigned char*)HMAC_KEY_GATEWAY,
+        strlen(HMAC_KEY_GATEWAY), (const unsigned char*)msg.c_str(), msg.length(), out) != 0) return "";
+  char hex[65];
+  for (int i=0; i<32; i++) sprintf(hex+2*i, "%02x", out[i]);
+  hex[64]=0;
+  return String(hex);
+}
+bool igualConstante(const String& a,const String& b) {
+  if(a.length()!=64 || b.length()!=64) return false;
+  uint8_t diff=0;
+  for(int i=0;i<64;i++) diff|=(uint8_t)(a[i]^b[i]);
+  return diff==0;
+}
+String secuenciaLarga(uint64_t seq64) {
+  char buf[24];
+  snprintf(buf,sizeof(buf),"%llu",(unsigned long long)seq64);
+  return String(buf);
 }
 
 // Texto canónico que se firma (propuesta para el contrato del grupo).
@@ -138,6 +171,11 @@ void leerSensores() {
 
 // ================= Decidir (edge) =================
 void decidirRiesgo() {
+  if (calidad != "ok") {
+    // Un sensor inválido JAMÁS puede apagar el indicador de peligro.
+    riesgo = ALTO;
+    return;
+  }
   // Sin gateway (modo seguro) somos más conservadores: basta el nivel de ALERTA.
   float limiteAlto = modoSeguro ? UMBRAL_ALERTA : UMBRAL_CRITICO;
   float f = (riesgo == BAJO) ? 1.0 : (1.0 - HISTERESIS);
@@ -154,6 +192,25 @@ void actualizarLed() {
   else                      digitalWrite(PIN_LED, LOW);
 }
 
+// La única telemetría que aceptamos sin alarma es el eco exacto de UN
+// mensaje que acabamos de publicar. Un segundo eco idéntico es replay.
+void guardarEco(unsigned long secuencia,const String& firma) {
+  ecos[cursorEco].seq=secuencia;
+  ecos[cursorEco].firma=firma;
+  ecos[cursorEco].pendiente=true;
+  cursorEco=(cursorEco+1)%16;
+}
+bool consumirEco(unsigned long secuencia,const String& firma) {
+  for (int i=0;i<16;i++) {
+    if (ecos[i].pendiente && ecos[i].seq==secuencia &&
+        igualConstante(ecos[i].firma,firma)) {
+      ecos[i].pendiente=false;
+      return true;
+    }
+  }
+  return false;
+}
+
 // ================= Publicar =================
 void publicarLectura(const char* sensor, float valor, const char* unidad, const char* cal) {
   if (!mqtt.connected()) return;
@@ -163,11 +220,15 @@ void publicarLectura(const char* sensor, float valor, const char* unidad, const 
   doc["id"] = NODO_ID;  doc["ts"] = ts;  doc["seq"] = seq;  doc["sensor"] = sensor;
   doc["valor"] = serialized(String(valor, 2));
   doc["unidad"] = unidad;  doc["calidad"] = cal;
-  doc["firma"] = hmacHex(textoCanonico(NODO_ID, ts, seq, sensor, valor, unidad, cal));
+  String firma = hmacHex(textoCanonico(NODO_ID, ts, seq, sensor, valor, unidad, cal));
+  if (firma.length() != 64) return;
+  doc["firma"] = firma;
   char out[320];
   serializeJson(doc, out);
-  mqtt.publish(T_DATOS, out);
-  if (mensajeViejo.length() == 0 && strcmp(sensor, "gas") == 0) mensajeViejo = out;
+  if (mqtt.publish(T_DATOS, out)) {
+    guardarEco(seq, firma);
+    if (mensajeViejo.length() == 0 && strcmp(sensor, "gas") == 0) mensajeViejo = out;
+  }
 }
 
 void publicarTodo() {
@@ -186,7 +247,9 @@ void publicarAlerta(const char* tipo, const String& motivo) {
   doc["gas"] = serialized(String(gasPpm, 2));
   doc["viento"] = vientoGrados;  doc["hacia"] = haciaComunidad;
   doc["motivo"] = motivo;
-  doc["firma"] = hmacHex(String(NODO_ID) + "|" + ts + "|" + tipo + "|" + motivo);
+  String firma = hmacHex(String(NODO_ID) + "|" + ts + "|" + tipo + "|" + motivo);
+  if (firma.length() != 64) return;
+  doc["firma"] = firma;
   char out[512];
   serializeJson(doc, out);
   mqtt.publish(T_ALERTA, out);
@@ -233,9 +296,10 @@ void revisarMensajeEnMiTopico(JsonDocument& doc) {
   const char* cal  = doc["calidad"] | "";
   String firma     = doc["firma"] | "";
 
-  bool firmaOk = firma == hmacHex(textoCanonico(NODO_ID, ts, s, sensor, valor, uni, cal));
-  bool reciente = s <= seq && s + 6 >= seq;
-  if (firmaOk && reciente) return;            // es un mensaje propio de vuelta: normal
+  bool firmaOk = igualConstante(firma,
+    hmacHex(textoCanonico(NODO_ID, ts, s, sensor, valor, uni, cal)));
+  if (firmaOk && consumirEco(s,firma)) return; // eco propio, una sola vez
+  // Un mensaje firmado que ya fue consumido no vuelve a ser admisible.
 
   const char* ataque = firmaOk ? "repeticion" : "suplantacion";
   String motivo = firmaOk ? "Firma válida pero mensaje viejo reenviado (seq " + String(s) + ", actual " + String(seq) + ")"
@@ -279,6 +343,42 @@ void simularAtaque(const char* tipo) {
   }
 }
 
+// Un heartbeat firmado en T_CMD permite salir de modo seguro.
+// No es una orden de actuador. El ultimo seq se almacena antes de aceptarlo.
+void procesarLatidoGateway(JsonDocument& doc) {
+  if (!doc["id"].is<const char*>() || !doc["cmd"].is<const char*>() ||
+      !doc["valor"].is<const char*>() || !doc["firma"].is<const char*>() ||
+      !doc["ts"].is<unsigned long>() ||
+      !(doc["seq"].is<unsigned long>() || doc["seq"].is<uint64_t>())) return;
+  const String id=doc["id"].as<String>();
+  const String cmd=doc["cmd"].as<String>();
+  const String valor=doc["valor"].as<String>();
+  const String firma=doc["firma"].as<String>();
+  const uint32_t ts=doc["ts"].as<uint32_t>();
+  const uint64_t s=doc["seq"].as<uint64_t>();
+  if (id!="D5" || cmd!="HB" || valor!="1" || s==0) return;
+  time_t ahora=time(nullptr);
+  if(ahora < 1700000000LL || (int64_t)ahora-(int64_t)ts>120 ||
+     (int64_t)ts-(int64_t)ahora>45) {
+    publicarEventoSeguridad("latido_falso","RECHAZADO",
+                           "HB sin reloj valido o vencido",-1,"");
+    return;
+  }
+  String canon=id+"|"+String(ts)+"|"+secuenciaLarga(s)+"|"+cmd+"|"+valor;
+  if(!igualConstante(firma,hmacGateway(canon))) {
+    publicarEventoSeguridad("latido_falso","RECHAZADO","HMAC del gateway invalido",-1,firma);
+    return;
+  }
+  if(!prefsGatewayOK || s<=ultimoSeqGateway) {
+    publicarEventoSeguridad("repeticion_gateway","RECHAZADO","SEQ de gateway repetido",-1,firma);
+    return;
+  }
+  if(prefsGateway.putULong64("lastSeq",s)==0) return;
+  ultimoSeqGateway=s;
+  ultimoGateway=millis();
+  Serial.println("[GATEWAY] HB firmado y fresco: modo normal permitido");
+}
+
 // ================= MQTT =================
 String resumenFuente(JsonDocument& doc) {
   return String((float)(doc["valor"] | 0.0f), 1) + " " + String((const char*)(doc["unidad"] | ""));
@@ -287,8 +387,7 @@ String resumenFuente(JsonDocument& doc) {
 void alRecibir(char* topic, byte* payload, unsigned int len) {
   String t(topic);
   if (t == T_GW) {
-    String p((char*)payload, len);
-    if (p.indexOf("offline") < 0) ultimoGateway = millis();
+    // El estado del broker publico NO esta autenticado: nunca quitar modo seguro.
     return;
   }
   JsonDocument doc;
@@ -297,9 +396,11 @@ void alRecibir(char* topic, byte* payload, unsigned int len) {
     return;
   }
   if (t == T_DATOS) { revisarMensajeEnMiTopico(doc); return; }
+  if (t == T_CMD) { procesarLatidoGateway(doc); return; }
   if (t == T_POZAS || t == T_SECAD) {
     String sensor = doc["sensor"] | "";
-    if (sensor.startsWith("gas")) (t == T_POZAS ? pozasTxt : secadTxt) = resumenFuente(doc);
+    if (sensor.startsWith("gas")) (t == T_POZAS ? pozasTxt : secadTxt) =
+      String("[no autenticado] ") + resumenFuente(doc);
     return;
   }
   if (t == T_SIM) {
@@ -336,6 +437,8 @@ void conectar() {
 // ================= Programa =================
 void setup() {
   Serial.begin(115200);
+  prefsGatewayOK=prefsGateway.begin("g1n3gw",false);
+  if(prefsGatewayOK) ultimoSeqGateway=prefsGateway.getULong64("lastSeq",0);
   pinMode(PIN_LED, OUTPUT);
   analogReadResolution(12);
   WiFi.mode(WIFI_STA);
@@ -344,6 +447,7 @@ void setup() {
   mqtt.setServer(MQTT_HOST, MQTT_PORT);
   mqtt.setCallback(alRecibir);
   mqtt.setBufferSize(1024);
+  mqtt.setKeepAlive(30);
   mqtt.setSocketTimeout(2);
   Serial.println("Nodo 3 Perímetro listo");
 }
