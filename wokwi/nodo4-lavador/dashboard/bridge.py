@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import hmac
+import math
 import json
 import secrets
 import socket
@@ -49,6 +50,12 @@ def load_config():
     for field in ('clave_gateway', 'clave_nodo4'):
         if any(word in cfg[field].upper() for word in ('REEMPLAZAR', 'CAMBIAR', 'EJEMPLO', 'PLACEHOLDER')):
             raise SystemExit('Sustituye el valor de ' + field + ' por la clave de pruebas usada en Wokwi.')
+    for field in ('clave_gateway','clave_nodo4'):
+        key = cfg[field]
+        if (not isinstance(key, str) or len(key) < 24 or
+                key.startswith(('G1_Gateway_Lab_', 'G1_Nodo4_Lab_'))):
+            raise SystemExit('Clave de demostración publicada o insuficiente: cámbiala en config.local.json')
+    cfg.setdefault('topic_paquete', cfg['topic_datos'].rsplit('/', 1)[0] + '/paquete')
     cfg['port'] = int(cfg['port'])
     return cfg
 
@@ -67,6 +74,36 @@ def sign_command(cmd, key, seq, ts=None, valor=''):
     return doc
 
 
+def verify_group_node(doc, topic, config):
+    """Valida la firma de cada sensor emitido por D4 en /datos."""
+    if topic != config['topic_datos'] or not isinstance(doc, dict) or doc.get('id') != 'nodo4':
+        return False
+    allowed = {
+        'lavador': ('estado', 0, 1),
+        'confirmacion': ('estado', 0, 1),
+        'intensidad': ('nivel', 1, 3),
+        'modo_seguro': ('estado', 0, 1),
+        'riesgo_alto': ('estado', 0, 1),
+    }
+    sensor = doc.get('sensor')
+    if not isinstance(sensor, str) or sensor not in allowed:
+        return False
+    unit, lo, hi = allowed[sensor]
+    valor = doc.get('valor')
+    if (type(doc.get('ts')) is not int or doc['ts'] < 0 or
+            type(doc.get('seq')) is not int or doc['seq'] < 1 or
+            type(valor) not in (int, float) or not math.isfinite(valor) or
+            int(valor) != valor or not lo <= valor <= hi or
+            doc.get('calidad') != 'ok' or doc.get('unidad') != unit or
+            not isinstance(doc.get('firma'), str)):
+        return False
+    canonical = '|'.join([
+        'nodo4', str(doc['ts']), str(doc['seq']), sensor,
+        f'{valor:.2f}', unit, 'ok'
+    ])
+    return hmac.compare_digest(sign(canonical, config['clave_nodo4']), doc['firma'])
+
+
 def verify_node(doc, topic, config):
     """Comprueba HMAC tal como lo construye el sketch D4 V3."""
     if not isinstance(doc, dict) or doc.get('id') != 'D4':
@@ -79,7 +116,7 @@ def verify_node(doc, topic, config):
     calidad = doc.get('calidad')
     if not all(isinstance(x, str) for x in (valor, unidad, calidad)):
         return False
-    if topic == config['topic_datos']:
+    if topic == config['topic_paquete']:
         if not all(isinstance(doc.get(k), str) for k in ('intensidad', 'confirmado', 'seguro', 'riesgo')):
             return False
         if type(doc.get('seq')) is not int or doc['seq'] < 0:
@@ -123,6 +160,7 @@ class GatewayBridge:
         self.security_events = 0
         self.rejected_telemetry = 0
         self.last_seq = 0
+        self.group_seq = {}
         self.last_actuation = None
         self.command_results = {}
         self.last_request = None
@@ -150,7 +188,7 @@ class GatewayBridge:
             with self.lock:
                 self.connection_note = f'MQTT conectado ({self.transport})'
                 self.connected_since = time.time()
-            for topic in (self.cfg['topic_datos'], self.cfg['topic_alerta'], self.cfg['topic_estado']):
+            for topic in (self.cfg['topic_datos'], self.cfg['topic_paquete'], self.cfg['topic_alerta'], self.cfg['topic_estado']):
                 client.subscribe(topic, qos=1)
             self.add_event('MQTT', 'Broker conectado; suscrito a D4')
             print('[MQTT] Conectado. Escuchando D4.')
@@ -166,13 +204,24 @@ class GatewayBridge:
             self.add_event('MQTT', 'Conexión interrumpida; el cliente intentará recuperarla')
 
     def handle_payload(self, topic, payload):
-        if topic == self.cfg['topic_estado'] and payload == b'offline':
+        if topic == self.cfg['topic_estado'] and (
+                payload == b'offline' or
+                payload in (b'{"id":"nodo4","estado":"offline"}', b'{"estado":"offline"}')):
             with self.lock:
                 self.presence_hint = 'offline_lwt_no_firmado'
             self.add_event('LWT', 'Se recibió aviso offline sin firma; es orientativo, no autenticado')
             return
         try:
             doc = json.loads(payload.decode('utf-8'))
+            if topic == self.cfg['topic_datos']:
+                if not verify_group_node(doc, topic, self.cfg):
+                    raise ValueError('HMAC por sensor inválida')
+                with self.lock:
+                    sensor, seq = doc['sensor'], doc['seq']
+                    if seq <= self.group_seq.get(sensor, 0):
+                        raise ValueError('Replay en sensor del grupo')
+                    self.group_seq[sensor] = seq
+                return  # panel individual recibe el paquete completo /paquete
             if not verify_node(doc, topic, self.cfg):
                 raise ValueError('HMAC del nodo inválida')
         except (UnicodeDecodeError, ValueError, TypeError, KeyError):
@@ -183,7 +232,7 @@ class GatewayBridge:
                 self.add_event('FIRMA', f'Telemetría descartada: firma o estructura inválida ({topic.rsplit("/",1)[-1]})', 'security')
             return
         now = time.time()
-        if topic == self.cfg['topic_datos']:
+        if topic == self.cfg['topic_paquete']:
             if doc.get('valor') not in ('ON', 'OFF'):
                 return
             with self.lock:
@@ -393,7 +442,7 @@ class GatewayBridge:
                 'last_request': result,
                 'gateway_heartbeat_enabled': self.send_heartbeat,
                 'history': list(self.recent_status),
-                'topics': {k.removeprefix('topic_'): self.cfg[k] for k in ('topic_cmd', 'topic_datos', 'topic_estado', 'topic_alerta')},
+                'topics': {k.removeprefix('topic_'): self.cfg[k] for k in ('topic_cmd', 'topic_datos', 'topic_paquete', 'topic_estado', 'topic_alerta')},
             }
 
 
