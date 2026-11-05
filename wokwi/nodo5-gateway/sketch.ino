@@ -57,13 +57,14 @@ struct History {
     at=millis();
   }
   bool fresh() const { return count>0 && (uint32_t)(millis()-at)<=SAMPLE_MAX_AGE_MS; }
+  void invalidate() { count=0; at=0; }
   float avg() const {
     if(!count)return 0;
     float sum=0;for(int i=0;i<count;i++)sum+=samples[i];
     return sum/count;
   }
 };
-History n1Gas,n2Gas,n3Gas,n3Wind,n3Risk,n4Lavador,n4Confirm,n4Intensity;
+History n1Gas,n1Temp,n2Gas,n2Temp,n3Gas,n3Wind,n3Risk,n4Lavador,n4Confirm,n4Intensity;
 uint64_t lastSeqByNode[4]={0,0,0,0};
 uint64_t nextCommandSeq=0;
 uint32_t latestData=0, lastWifi=0, lastMQTT=0,lastHB=0,lastStatus=0;
@@ -137,7 +138,7 @@ bool sensorExpected(int n,const String& s,const String& unit,float v) {
   if(!isfinite(v))return false;
   if(n==0) {
     if(s=="gas_raw")return unit=="adc" && v>=0 && v<=4095;
-    if(s=="temperatura")return unit=="C" && v>=-40 && v<=125;
+    if(s=="temperatura")return unit=="C" && v>=-127 && v<=125;
   } else if(n==1) {
     if(s=="gas_relativo")return unit=="%" && v>=0 && v<=100;
     if(s=="gas_raw")return unit=="adc" && v>=0 && v<=4095;
@@ -202,10 +203,21 @@ void acceptData(const char* topic,byte* bytes,unsigned int length) {
   lastSeqByNode[n]=seq; totalVerified++;
   latestData=millis();
 
-  // Invalid sensor quality can never be interpreted as a healthy gas reading.
-  if(!dataQualityOK(n,quality))return;
+  // Invalid signed quality cancels any older apparently fresh sample.
+  if(!dataQualityOK(n,quality)) {
+    if(n==0 && sensor=="gas_raw")n1Gas.invalidate();
+    if(n==0 && sensor=="temperatura")n1Temp.invalidate();
+    if(n==1 && sensor=="gas_relativo")n2Gas.invalidate();
+    if(n==1 && sensor=="temperatura")n2Temp.invalidate();
+    if(n==2 && sensor=="gas")n3Gas.invalidate();
+    if(n==2 && sensor=="viento")n3Wind.invalidate();
+    if(n==2 && sensor=="riesgo")n3Risk.invalidate();
+    return;
+  }
   if(n==0 && sensor=="gas_raw")n1Gas.add(val);
+  if(n==0 && sensor=="temperatura")n1Temp.add(val);
   if(n==1 && sensor=="gas_relativo")n2Gas.add(val);
+  if(n==1 && sensor=="temperatura")n2Temp.add(val);
   if(n==2 && sensor=="gas")n3Gas.add(val);
   if(n==2 && sensor=="viento")n3Wind.add(val);
   if(n==2 && sensor=="riesgo")n3Risk.add(val);
@@ -265,7 +277,8 @@ void onMQTT(char* topic,byte* payload,unsigned int length) {
 }
 FogInputs fogInputs() {
   return {n1Gas.fresh(),n2Gas.fresh(),n3Gas.fresh(),n3Wind.fresh(),n3Risk.fresh(),
-          n1Gas.avg(),n2Gas.avg(),n3Gas.avg(),n3Wind.avg(),(int)roundf(n3Risk.avg())};
+          n1Gas.avg(),n2Gas.avg(),n3Gas.avg(),n3Wind.avg(),(int)roundf(n3Risk.avg()),
+          n1Temp.fresh(),n2Temp.fresh(),n1Temp.avg(),n2Temp.avg()};
 }
 bool publishJson(const char* topic,JsonDocument& j,bool retain=false) {
   if(!mqtt.connected())return false;

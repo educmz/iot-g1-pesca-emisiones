@@ -2,7 +2,7 @@
 #include <iostream>
 #include "fog_logic.h"
 int main() {
-  const FogInputs ok={true,true,true,true,true,800,10,400,180,0};
+  const FogInputs ok={true,true,true,true,true,800,10,400,180,0,true,true,22,24};
   FogDecision v=evaluateFog(ok);
   assert(v.level==0 && v.safeToStop && !v.requireLavador);
   FogInputs one=ok; one.n2Percent=80;
@@ -17,5 +17,9 @@ int main() {
   v=evaluateFog(risk); assert(v.level==2 && v.requireLavador);
   FogInputs boundary=ok; boundary.windDegrees=135; boundary.n2Percent=85;boundary.n3SimPpm=1200;
   v=evaluateFog(boundary);assert(v.windToCommunity && v.level==2);
-  std::cout<<"OK: siete escenarios Fog de laboratorio\n";
+  FogInputs temp=ok;temp.n1TempC=48;temp.n2TempC=55;temp.windDegrees=90;
+  v=evaluateFog(temp);assert(v.level==2 && v.requireLavador);
+  FogInputs sensorLoss=ok;sensorLoss.n1TempValid=false;
+  v=evaluateFog(sensorLoss);assert(!v.safeToStop && v.level==1);
+  std::cout<<"OK: nueve escenarios Fog de laboratorio\n";
 }
